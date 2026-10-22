@@ -1,0 +1,17 @@
+{
+  "id": "/",
+  "name": "Atelier sur mesure",
+  "short_name": "Atelier",
+  "description": "Dessiner ses constructions, préparer les assemblages et les achats.",
+  "lang": "fr",
+  "start_url": "/index.html",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f6f4ed",
+  "theme_color": "#324f3f",
+  "prefer_related_applications": false,
+  "icons": [
+    {"src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+    {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+  ]
+}

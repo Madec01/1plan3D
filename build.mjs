@@ -1,0 +1,22 @@
+import {build} from 'esbuild';
+import {readFile,writeFile,mkdir,copyFile} from 'node:fs/promises';
+import {createHash} from 'node:crypto';
+const bundled=await build({entryPoints:['src/app.js'],bundle:true,write:false,format:'iife',target:'es2022',minify:true,legalComments:'inline'});
+const css=await readFile('src/style.css','utf8');
+const shell=await readFile('src/shell.html','utf8');
+const script=bundled.outputFiles[0].text.replace(/<\/(script|body|head)/gi,(_,tag)=>'<\\/'+tag);
+const base=shell.replace('/*__CSS__*/',()=>css).replace('/*__SCRIPT__*/',()=>script);
+const {version}=JSON.parse(await readFile('package.json','utf8'));
+if(!/^\d+\.\d+\.\d+(?:[-.][a-zA-Z0-9.-]+)?$/.test(version))throw new Error('Version de build invalide.');
+const publicFiles=['manifest.webmanifest','icon-192.png','icon-512.png'];
+const worker=await readFile('public/sw.js','utf8');
+const hash=createHash('sha256').update(version).update(base).update(worker);
+for(const file of publicFiles)hash.update(await readFile(`public/${file}`));
+const buildId=hash.digest('hex').slice(0,20);
+// Assets are linked only on the hosted app. The downloaded HTML remains self-contained.
+const hostedLinks=`<meta name="atelier-app-shell" content="${version}:${buildId}"><script>(function(){if(!/^https?:$/.test(location.protocol))return;var d=document;[['manifest','/manifest.webmanifest'],['apple-touch-icon','/icon-192.png']].forEach(function(x){var l=d.createElement('link');l.rel=x[0];l.href=x[1];d.head.appendChild(l)});})();</script>`;
+const html=base.replace('</head>',()=>`${hostedLinks}</head>`);
+await mkdir('dist',{recursive:true});await writeFile('dist/index.html',html);
+await writeFile('dist/sw.js',worker.replaceAll('__ATELIER_VERSION__',version).replaceAll('__ATELIER_BUILD_ID__',buildId));
+await Promise.all(publicFiles.map(file=>copyFile(`public/${file}`,`dist/${file}`)));
+console.log(`HTML autonome créé : ${Math.round(Buffer.byteLength(html)/1024)} Ko · PWA ${version} (${buildId})`);
