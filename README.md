@@ -3,7 +3,7 @@
 ## Utilisation et développement
 
 - Ouvrir **dist/index.html** dans un navigateur : le HTML contient le code et le pack de textures PBR embarquées, sans dépendance réseau pour le dessin.
-- Adresse GitHub Pages après activation : https://madec01.github.io/1plan3D/
+- Application hébergée par GitHub Pages : https://madec01.github.io/1plan3D/
 - Sources : https://github.com/Madec01/1plan3D
 - Développement : Node.js 22 ou ultérieur, puis `npm install`, `npm test` et `npm run build`. Le verrou `pnpm-lock.yaml` permet aussi l’installation avec pnpm (`pnpm install --frozen-lockfile`).
 - `src/` contient les modules et l’interface ; `tests/` les tests ; `public/` les fichiers d’installation ; `dist/` la version directement utilisable. `build.mjs` produit le HTML autonome.

@@ -47,6 +47,18 @@ test('capture uses committed geometry during a pending move and restores the pen
  let during;const render=v.renderer.render.bind(v.renderer);v.renderer.render=(scene,camera)=>{scene.updateMatrixWorld(true);if(camera!==v.camera)during=f.wood.getWorldPosition(new THREE.Vector3()).toArray();render(scene,camera);};
  v.captureView({view:'front'});assert.deepEqual(during,[-1,1,0]);assert.deepEqual(v.pivot.position.toArray(),[5,0,0]);assert.ok(v.pendingTransform);
 });
+test('cached shadows are refreshed for export-only visibility and restored after a failed capture',()=>{
+ const f=sceneFixture(),v=f.viewport;
+ v.withCommittedTransforms=Viewport.prototype.withCommittedTransforms;v.invalidateShadows=Viewport.prototype.invalidateShadows;
+ v.renderer.shadowMap={enabled:true,autoUpdate:false,needsUpdate:false};
+ const states=[],render=v.renderer.render.bind(v.renderer);
+ v.renderer.render=(scene,camera)=>{states.push({refresh:v.renderer.shadowMap.needsUpdate,panel:f.panel.visible});v.renderer.shadowMap.needsUpdate=false;render(scene,camera)};
+ v.captureView({style:'structure'});
+ assert.deepEqual(states,[{refresh:true,panel:false},{refresh:true,panel:true}]);
+ states.length=0;v.canvas.toDataURL=()=>{throw Error('PNG indisponible')};
+ assert.throws(()=>v.captureView({style:'structure'}),/PNG indisponible/);
+ assert.deepEqual(states,[{refresh:true,panel:false},{refresh:true,panel:true}]);
+});
 test('ZIP preserves UTF-8 names, binary image bytes, central offsets and CRC-32',()=>{
  assert.equal(crc32(new TextEncoder().encode('123456789')),0xcbf43926);
  const archive=zipFiles([{name:'Plans/côté.svg',data:'<svg>é</svg>'},{name:'3D/top.png',data:Uint8Array.of(0,255,1,40)}]),entries=unpack(archive);

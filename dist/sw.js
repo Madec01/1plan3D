@@ -1,6 +1,6 @@
 /* Atelier sur mesure. Build replaces both tokens; no user projects enter this cache. */
 const VERSION = '0.29.0';
-const BUILD_ID = 'c7575efb9ae292aee6b6';
+const BUILD_ID = 'df3b727fb6b84b2798b0';
 // GitHub Pages serves project sites in a subdirectory. Keep assets and cache
 // cleanup inside this installation, even when other apps share the same origin.
 const BASE = new URL('./', self.location.href);

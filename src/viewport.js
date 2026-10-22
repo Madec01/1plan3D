@@ -23,7 +23,7 @@ export class Viewport {
   this.canvas=canvas;this.onSelect=onSelect;this.onTransform=onTransform;this.flags={mesh:true,roof:true,foundation:true,dimensions:true,joints:false,wall:true,fixings:true};this.selectedIds=[];this.tool='select';this.center=new THREE.Vector3(0,1,0);this.liveSnap=true;this.altKey=false;this.interaction=null;this.touchMode='pan';this.multiSelect=false;this.touchPointers=new Map();this.touchSequenceBlocked=false;this.lastPointerType='mouse';this.pendingTransform=null;
   this.scene=new THREE.Scene();this.scene.background=new THREE.Color('#f1f2ec');
   this.orbitCamera=new THREE.OrthographicCamera(-5,5,4,-4,.01,1000);this.freeCamera=new THREE.PerspectiveCamera(50,1,.005,2000);this.camera=this.orbitCamera;this.navigation='orbit';
-  this.renderer=createRenderer({canvas,antialias:true,preserveDrawingBuffer:true});this.fullPixelRatio=Math.min(window.devicePixelRatio||1,2);this.renderer.setPixelRatio(this.fullPixelRatio);this.renderer.shadowMap.enabled=true;this.renderer.shadowMap.type=THREE.PCFSoftShadowMap;this.renderer.outputColorSpace=THREE.SRGBColorSpace;this.renderer.toneMapping=THREE.ACESFilmicToneMapping;this.renderer.toneMappingExposure=1.4;
+  this.renderer=createRenderer({canvas,antialias:true,preserveDrawingBuffer:true});this.fullPixelRatio=Math.min(window.devicePixelRatio||1,2);this.renderer.setPixelRatio(this.fullPixelRatio);this.renderer.shadowMap.enabled=true;this.renderer.shadowMap.autoUpdate=false;this.invalidateShadows();this.renderer.shadowMap.type=THREE.PCFSoftShadowMap;this.renderer.outputColorSpace=THREE.SRGBColorSpace;this.renderer.toneMapping=THREE.ACESFilmicToneMapping;this.renderer.toneMappingExposure=1.4;
   this.resetOrbitControls(this.center);
   this.scene.add(new THREE.HemisphereLight(0xffffff,0xb7bc9e,2.2));const light=new THREE.DirectionalLight(0xfff4dd,3);light.position.set(-5,12,-4);light.castShadow=true;light.shadow.mapSize.set(2048,2048);Object.assign(light.shadow.camera,{left:-15,right:15,top:15,bottom:-15});light.shadow.normalBias=.025;this.scene.add(light);
   this.textures=true;this.ground=new THREE.Mesh(new THREE.PlaneGeometry(200,200),createGroundMaterial());this.ground.rotation.x=-Math.PI/2;this.ground.position.y=-.035;this.ground.receiveShadow=true;this.scene.add(this.ground);
@@ -33,6 +33,7 @@ export class Viewport {
   this.transform=new TransformControls(this.camera,canvas);this.transform.setSize(.8);this.scene.add(this.transform.getHelper());
   this.transform.addEventListener('dragging-changed',()=>{if(this.transform.dragging&&this.navigation==='orbit')this.resetOrbitControls(this.controls.target);this.syncNavigation()});
   this.transform.addEventListener('objectChange',()=>{
+   this.invalidateShadows();
    if((this.tool!=='translate'&&!this.selectedFixing)||!this.dragStart)return;
    this.dragRawDelta=this.pivot.position.clone().sub(this.dragStart).multiplyScalar(1000).toArray();this.updateDragPosition();
   });
@@ -58,13 +59,22 @@ export class Viewport {
   this.raycaster=new THREE.Raycaster();this.pointer=new THREE.Vector2();let start;
   this.installTouchInteraction();
   canvas.addEventListener('pointerdown',e=>{this.altKey=e.altKey;start=[e.clientX,e.clientY];if(e.button===2)this.contextGesture={id:e.pointerId,x:e.clientX,y:e.clientY,time:Date.now(),position:this.camera.position.clone(),quaternion:this.camera.quaternion.clone(),target:this.controls.target.clone()}});
-  canvas.addEventListener('pointermove',e=>{this.altKey=e.altKey;if(this.contextGesture?.id===e.pointerId&&Math.hypot(e.clientX-this.contextGesture.x,e.clientY-this.contextGesture.y)>5)this.contextGesture.moved=true;if(e.pointerType==='touch'||this.transform.dragging||this.pendingTransform||this.pendingPanel||this.panelDrag)return;const resizeHandle=this.pickPanelHandle(e);if(resizeHandle){this.canvas.style.cursor='nwse-resize';this.setHover(null);return}this.canvas.style.cursor='';if(this.interaction){this.updateInteraction(e);return}this.setHover(this.pick(e)?.object||null)});
-  canvas.addEventListener('pointerleave',()=>this.setHover(null));
+  canvas.addEventListener('pointermove',e=>{this.altKey=e.altKey;if(this.contextGesture?.id===e.pointerId&&Math.hypot(e.clientX-this.contextGesture.x,e.clientY-this.contextGesture.y)>5)this.contextGesture.moved=true;if(e.pointerType==='touch'||this.transform.dragging||this.pendingTransform||this.pendingPanel||this.panelDrag)return;if(this.interaction){this.updateInteraction(e);return}if(e.buttons){this.pendingHover=null;this.setHover(null);return}this.pendingHover={clientX:e.clientX,clientY:e.clientY,pointerType:e.pointerType};});
+  canvas.addEventListener('pointerleave',()=>{this.pendingHover=null;this.setHover(null)});
   canvas.addEventListener('pointerup',e=>{this.altKey=e.altKey;if(e.button===2){this.finishContextClick(e);return}if(e.pointerType==='touch'){this.finishTouchTap(e);return}if(e.button!==0||Date.now()-(this.suppressClick||0)<220||!start||Math.hypot(e.clientX-start[0],e.clientY-start[1])>5||this.pendingTransform)return;if(this.interaction){this.interactionClick(e);return}if(this.activateDimension(e))return;this.onSelect(this.pick(e)?.part??null,e)});
   canvas.addEventListener('contextmenu',e=>e.preventDefault());
   this.modifierHandler=e=>{this.altKey=e.altKey;if(e.key==='Escape')this.cancelInteraction();if(this.dragStart&&(this.tool==='translate'||this.selectedFixing))this.updateDragPosition();if(this.interaction?.type==='placement'&&this.lastPlacementEvent)this.updateInteraction({...this.lastPlacementEvent,altKey:this.altKey})};window.addEventListener('keydown',this.modifierHandler);window.addEventListener('keyup',this.modifierHandler);
   this.resizeObserver=new ResizeObserver(()=>this.resize());this.resizeObserver.observe(canvas.parentElement);this.resizeObserver.observe(canvas);this.resize();this.view('iso');
-  this.renderer.setAnimationLoop(()=>{if(this.navigation==='orbit'&&this.controls.enabled&&!this.transform.dragging)this.controls.update();this.updateAccessibleGizmo();this.updateHighlights();this.renderer.render(this.scene,this.camera)});
+  this.renderer.setAnimationLoop(()=>{if(this.navigation==='orbit'&&this.controls.enabled&&!this.transform.dragging)this.controls.update();this.updatePointerHover();this.updateAccessibleGizmo();this.updateHighlights();this.renderer.render(this.scene,this.camera)});
+ }
+ // Camera motion does not change a directional light's shadow map. Refresh it
+ // only when geometry/visibility changes, including temporary export states.
+ invalidateShadows(){if(this.renderer?.shadowMap)this.renderer.shadowMap.needsUpdate=true}
+ updatePointerHover(){
+  const event=this.pendingHover;this.pendingHover=null;
+  if(!event||this.interaction||this.transform.dragging||this.pendingTransform||this.pendingPanel||this.panelDrag)return;
+  if(this.pickPanelHandle(event)){this.setHover(null);this.canvas.style.cursor='nwse-resize';return}
+  const object=this.pick(event)?.object||null;this.setHover(object);this.canvas.style.cursor=object?'pointer':'';
  }
  resetOrbitControls(target=this.controls?.target||this.center){
   // OrbitControls mémorise camera.up et ses gestes : recréer le contrôleur purge
@@ -97,7 +107,7 @@ export class Viewport {
  setMultiSelect(value){this.multiSelect=!!value;return this.multiSelect}
  canConfirmInteraction(){return !!this.pendingPanel||!!this.pendingTransform||!!(this.interaction?.type==='placement'&&this.interaction.placedPart)}
  confirmInteraction(){
-  if(this.pendingPanel){const pending=this.pendingPanel;this.pendingPanel=null;pending.object.visible=pending.visible;this.clear(this.placementGroup);this.status('Dimensions appliquées');this.syncNavigation();this.onPanelResize?.(pending.part.id,pending.result.corners.map(p=>[...p]));this.configureTransform();this.refreshPanelHandles();return true}
+  if(this.pendingPanel){const pending=this.pendingPanel;this.pendingPanel=null;pending.object.visible=pending.visible;this.invalidateShadows();this.clear(this.placementGroup);this.status('Dimensions appliquées');this.syncNavigation();this.onPanelResize?.(pending.part.id,pending.result.corners.map(p=>[...p]));this.configureTransform();this.refreshPanelHandles();return true}
   if(this.pendingTransform){const pending=this.pendingTransform;this.pendingTransform=null;this.clear(this.placementShadowGroup);this.status('Déplacement appliqué');this.commitTransform(pending);this.configureTransform();return true}
   if(this.interaction?.type==='placement'&&this.interaction.placedPart){const {placedPart:part,onPlace,contact:snap,supportId}=this.interaction,info={snap:snap?structuredClone(snap):null,supportId,surface:this.project?.placementSurface||'ground'};this.cancelInteraction();this.status(`${part.label||'Pièce'} placée`);onPlace?.(part,info);return true}return false;
  }
@@ -106,7 +116,7 @@ export class Viewport {
   if(Math.hypot(...payload.delta)>.001||Math.abs(payload.angle)>.001)this.onTransform?.(ids,payload);else this.select(this.selectedIds);
  }
  clearDragState(){this.clear(this.placementShadowGroup);this.dragStart=null;this.dragGrid=null;this.dragParts=null;this.dragRawDelta=null;this.dragSnapshot=null;this.dragTouch=false;this.snapCandidate=null;this.guideCandidate=null;this.previewPlacement([],null);this.clear(this.guideGroup)}
- restoreTransform(snapshot){if(!snapshot)return;this.pivot.position.copy(snapshot.position);this.pivot.quaternion.copy(snapshot.quaternion);this.pivot.scale.copy(snapshot.scale);this.pivot.updateMatrixWorld(true);this.updateHighlights()}
+ restoreTransform(snapshot){if(!snapshot)return;this.pivot.position.copy(snapshot.position);this.pivot.quaternion.copy(snapshot.quaternion);this.pivot.scale.copy(snapshot.scale);this.pivot.updateMatrixWorld(true);this.invalidateShadows?.();this.updateHighlights()}
  setTouchRendering(active){if(this.touchRendering===active)return;this.touchRendering=active;this.renderer.setPixelRatio(active?Math.min(this.fullPixelRatio,1):this.fullPixelRatio);this.syncNavigation()}
  clearPrecisionTimer(){if(this.precisionTimer){clearTimeout(this.precisionTimer);this.precisionTimer=null}}
  endPrecisionTouch(){this.clearPrecisionTimer();this.precisionTouch=null;if(this.touchCrosshair)this.touchCrosshair.hidden=true;this.syncNavigation()}
@@ -153,7 +163,7 @@ export class Viewport {
   const plan=['top','front','side','workplane'].includes(this.currentView),busy=!!this.interaction||!!this.panelDrag||!!this.pendingPanel;
   this.controls.enabled=this.navigation==='orbit'&&!this.transform.dragging&&!this.precisionTouch&&!this.panelDrag;this.controls.enableRotate=!plan&&!busy;this.controls.enableDamping=!plan&&!this.touchRendering;this.controls.mouseButtons.LEFT=busy?null:plan?THREE.MOUSE.PAN:THREE.MOUSE.ROTATE;this.controls.mouseButtons.RIGHT=THREE.MOUSE.PAN;this.controls.touches.ONE=!plan&&!busy&&this.touchMode==='rotate'?THREE.TOUCH.ROTATE:THREE.TOUCH.PAN;this.controls.touches.TWO=THREE.TOUCH.DOLLY_PAN;
   if(this.freeNavigation){this.freeNavigation.enabled=this.navigation==='free'&&!this.transform.dragging&&!this.panelDrag;this.freeNavigation.leftEnabled=!busy;this.freeNavigation.touchEnabledDuringTool=this.interaction?.type==='placement';this.freeNavigation.setTouchMode?.(this.touchMode)}
-  this.renderer.shadowMap.enabled=!plan&&!this.touchRendering;this.ground.visible=!plan;this.canvas.dataset.view=this.currentView||'iso';
+  const shadows=!plan&&!this.touchRendering;if(shadows&&!this.renderer.shadowMap.enabled)this.invalidateShadows();this.renderer.shadowMap.enabled=shadows;this.ground.visible=!plan;this.canvas.dataset.view=this.currentView||'iso';
   if(this.orientationLabel)this.orientationLabel.textContent=(( {top:'Dessus · → X+ · ↑ Z− · mm',front:'Face · → X− · ↑ Y+ · mm',side:'Côté · → Z− · ↑ Y+ · mm',workplane:'Plan de travail · U / V · mm'})[this.currentView]||'3D · X largeur · Y hauteur · Z profondeur · mm')+(this.gridCaption?' · '+this.gridCaption:'');
  }
  pointerRay(event){const r=this.canvas.getBoundingClientRect();this.pointer.set((event.clientX-r.left)/(r.width||1)*2-1,-(event.clientY-r.top)/(r.height||1)*2+1);this.camera.updateMatrixWorld();this.scene.updateMatrixWorld(true);this.raycaster.setFromCamera(this.pointer,this.camera);return this.raycaster.ray}
@@ -174,8 +184,20 @@ export class Viewport {
  measurePoint(event){return this.pick(event,{surfaces:true})?.point||this.pointOnPlane(event)}
  setHover(object){if(this.hovered===object)return;this.hovered=object;this.rebuildHighlights();this.canvas.style.cursor=this.interaction?'crosshair':object?'pointer':''}
  rebuildHighlights(){
-  if(!this.highlightGroup)return;this.clear(this.highlightGroup);const sources=[...(this.objects||[]),...(this.fixingObjects||[]),...this.jointGroup.children];
-  for(const source of sources){const part=source.userData.part,selected=this.selectedIds.includes(part?.id)||this.selectedFixing?.id===part?.id,hover=source===this.hovered;if(!selected&&!hover)continue;
+  if(!this.highlightGroup)return;
+  const wanted=new Map(),selectedIds=new Set(this.selectedIds);
+  for(const source of [...(this.objects||[]),...(this.fixingObjects||[]),...this.jointGroup.children]){
+   const id=source.userData.part?.id,selected=selectedIds.has(id)||!!this.selectedFixing&&this.selectedFixing.id===id;
+   if(selected||source===this.hovered)wanted.set(source,selected);
+  }
+  // Keep selected outlines and their GPU resources when only the hovered part
+  // changes. Disposing every outline on each mouse move caused avoidable work.
+  for(const outline of [...this.highlightGroup.children]){
+   const source=outline.userData.source;
+   if(wanted.has(source)&&wanted.get(source)===outline.userData.selected){wanted.delete(source);continue}
+   this.clear(outline);this.highlightGroup.remove(outline);
+  }
+  for(const [source,selected] of wanted){
    const outline=createFocusOverlay(source.geometry,selected?'selected':'hover',{fill:false,occluded:true,marker:selected});outline.renderOrder=14;outline.userData.source=source;outline.userData.selected=selected;outline.matrixAutoUpdate=false;this.highlightGroup.add(outline);
   }this.updateHighlights();
  }
@@ -187,7 +209,7 @@ export class Viewport {
  beginMeasure(){this.cancelInteraction();this.clearMeasurement();this.interaction={type:'measure',points:[]};this.transform.detach();this.setHover(null);this.syncNavigation();this.canvas.style.cursor='crosshair';this.status('Mesure · cliquez le premier point sur une surface ou le plan')}
  clearMeasurement(){this.measurement=null;if(this.measurementGroup)this.clear(this.measurementGroup)}
  cancelInteraction(){
-  const panel=this.panelDrag||this.pendingPanel;this.panelDrag=null;this.pendingPanel=null;if(panel){panel.object.visible=panel.visible;try{if(this.canvas.hasPointerCapture?.(panel.pointerId))this.canvas.releasePointerCapture(panel.pointerId)}catch{}}
+  const panel=this.panelDrag||this.pendingPanel;this.panelDrag=null;this.pendingPanel=null;if(panel){panel.object.visible=panel.visible;this.invalidateShadows();try{if(this.canvas.hasPointerCapture?.(panel.pointerId))this.canvas.releasePointerCapture(panel.pointerId)}catch{}}
   const pending=this.interaction,transform=this.pendingTransform,snapshot=transform?.snapshot||this.dragSnapshot,hadDrag=!!this.dragStart;this.interaction=null;this.pendingTransform=null;this.lastPlacementEvent=null;this.onCoordinates?.(null);this.clearPrecisionTimer();if(this.precisionTouch)this.endPrecisionTouch();
   if(snapshot){this.restoreTransform(snapshot);this.clearDragState();this.transform.dragging=false;this.transform.axis=null}
   this.clear(this.placementShadowGroup);if(this.placementGroup)this.clear(this.placementGroup);if(this.guideGroup)this.clear(this.guideGroup);if(pending?.type==='measure')this.clearMeasurement();
@@ -233,7 +255,7 @@ export class Viewport {
  }
  dragOptions(){return {axis:this.dragAxis||'XYZ',space:this.transform.space,quaternion:this.dragQuaternion||this.pivot.quaternion.toArray(),lock:!!this.project.workplane?.lock}}
  updateDragPosition(){
-  if(!this.dragStart)return;const delta=this.dragRawDelta||[0,0,0],strict=this.dragAssistance?.gridSnap&&!this.altKey&&!this.selectedFixing;let snapped;
+  if(!this.dragStart)return;this.invalidateShadows();const delta=this.dragRawDelta||[0,0,0],strict=this.dragAssistance?.gridSnap&&!this.altKey&&!this.selectedFixing;let snapped;
   this.gridBlocked=false;
   if(strict){snapped=snapDeltaToGrid(this.dragParts,delta,this.dragGrid,this.dragOptions());if(snapped)this.lastGridDelta=snapped;else{snapped=this.lastGridDelta||[0,0,0];this.gridBlocked=true}}
   else if(this.project.snap&&!this.altKey)snapped=snapMovement(delta,this.project.grid,this.project.workplane,this.selectedFixing?false:this.project.workplane?.lock,true);
@@ -288,12 +310,12 @@ export class Viewport {
   this.canvas.addEventListener('pointermove',event=>{
    const drag=this.panelDrag;if(!drag||drag.pointerId!==event.pointerId)return;consume(event);this.pointerRay(event);const ray=this.raycaster.ray,screenDelta=drag.screenFallback?resizeScreenDelta(drag.frame,drag.handleId,[event.clientX-drag.screenStart[0],event.clientY-drag.screenStart[1]],drag.basis):null,point=drag.screenFallback?screenDelta?.map((n,i)=>n+drag.start[i]):intersectPanelResizePlane(drag.frame,ray.origin.clone().multiplyScalar(1000).toArray(),ray.direction.toArray());if(!point)return;
    const result=resizePanelFromDrag(drag.part,drag.handleId,drag.start,point,{step:this.project.grid||1,free:!!event.altKey||this.project.snap===false});if(!result.available){this.status(result.message);return}
-   const resized={...drag.part,...surfaceResizePatch(drag.part,result.corners).patch};drag.result=result;drag.object.visible=false;this.clear(this.placementGroup);this.placementGroup.add(this.ghostPart(resized));this.refreshPanelHandles(resized);this.status(`${drag.part.kind==='wall'?'Mur':'Panneau'} · ${result.width.toLocaleString('fr-FR',{maximumFractionDigits:2})} × ${result.height.toLocaleString('fr-FR',{maximumFractionDigits:2})} mm${result.clamped?' · dimension minimale atteinte':''} · côté opposé fixe`);
+   const resized={...drag.part,...surfaceResizePatch(drag.part,result.corners).patch};drag.result=result;if(drag.object.visible)this.invalidateShadows();drag.object.visible=false;this.clear(this.placementGroup);this.placementGroup.add(this.ghostPart(resized));this.refreshPanelHandles(resized);this.status(`${drag.part.kind==='wall'?'Mur':'Panneau'} · ${result.width.toLocaleString('fr-FR',{maximumFractionDigits:2})} × ${result.height.toLocaleString('fr-FR',{maximumFractionDigits:2})} mm${result.clamped?' · dimension minimale atteinte':''} · côté opposé fixe`);
   },{capture:true,passive:false});
   this.canvas.addEventListener('pointerup',event=>{
    const drag=this.panelDrag;if(!drag||drag.pointerId!==event.pointerId)return;consume(event);this.panelDrag=null;this.canvas.style.cursor='';this.suppressClick=Date.now();
    if(drag.result?.changed){this.pendingPanel=drag;this.clear(this.panelHandleGroup);if(drag.pointerType==='touch'){this.syncNavigation();this.status('Dimensions en aperçu · Valider pour appliquer ou Annuler')}else this.confirmInteraction()}
-   else{drag.object.visible=drag.visible;this.clear(this.placementGroup);this.syncNavigation();this.configureTransform();this.refreshPanelHandles();this.status('')}
+   else{drag.object.visible=drag.visible;this.invalidateShadows();this.clear(this.placementGroup);this.syncNavigation();this.configureTransform();this.refreshPanelHandles();this.status('')}
    try{if(this.canvas.hasPointerCapture?.(event.pointerId))this.canvas.releasePointerCapture(event.pointerId)}catch{}
   },{capture:true,passive:false});
   const cancel=event=>{if(this.panelDrag?.pointerId===event.pointerId){consume(event);this.cancelInteraction()}};this.canvas.addEventListener('pointercancel',cancel,{capture:true});this.canvas.addEventListener('lostpointercapture',cancel,{capture:true});
@@ -397,7 +419,7 @@ export class Viewport {
   this.fixingGroup.visible=this.flags.fixings;
   const min=bounds.min.map(v=>v/1000),max=bounds.max.map(v=>v/1000),label=v=>`${v.toLocaleString('fr-FR',{maximumFractionDigits:1})} mm`;
   if(model.parts.length){this.dimension([min[0],.04,min[2]-.35],[max[0],.04,min[2]-.35],label(bounds.width));this.dimension([max[0]+.35,.04,min[2]],[max[0]+.35,.04,max[2]],label(bounds.depth));this.dimension([min[0]-.35,min[1],max[2]],[min[0]-.35,max[1],max[2]],label(bounds.height))}
-  this.dimGroup.visible=this.flags.dimensions;this.select(this.selectedIds);if(!this.hasFit){this.view('iso');this.hasFit=true}
+  this.dimGroup.visible=this.flags.dimensions;this.select(this.selectedIds);if(!this.hasFit){this.view('iso');this.hasFit=true}this.invalidateShadows();
  }
  dimension(a,b,label,group=this.dimGroup,color=0x4e6454,dimensionEdit=null){if(new THREE.Vector3(...a).distanceTo(new THREE.Vector3(...b))<.00001)return;const points=[new THREE.Vector3(...a),new THREE.Vector3(...b)];group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points),new THREE.LineBasicMaterial({color,depthTest:false})));for(const pos of points){const dot=new THREE.Mesh(new THREE.SphereGeometry(.012,8,8),new THREE.MeshBasicMaterial({color,depthTest:false}));dot.position.copy(pos);group.add(dot)}
   if(!label)return null;const cv=document.createElement('canvas');cv.width=Math.max(300,Math.min(1000,String(label).length*23+50));cv.height=100;const c=cv.getContext('2d');c.fillStyle='#f8f9f3';c.beginPath();c.roundRect(18,12,cv.width-36,76,18);c.fill();c.fillStyle='#'+new THREE.Color(color).getHexString();c.font='500 38px system-ui';c.textAlign='center';c.textBaseline='middle';c.fillText(label,cv.width/2,53);const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv),depthTest:false}));sprite.position.copy(points[0]).add(points[1]).multiplyScalar(.5);sprite.position.y+=.075;sprite.scale.set(cv.width/375,.267,1);sprite.userData.label=label;sprite.userData.aspect=cv.width/100;if(dimensionEdit)sprite.userData.dimensionEdit=structuredClone(dimensionEdit);group.add(sprite);return sprite;
@@ -442,8 +464,8 @@ export class Viewport {
 
  isVisible(part){return (!this.isolatedIds||this.isolatedIds.has(part.id))&&this.flags[part.group]!==false&&!(part.material==='mesh'&&!this.flags.mesh)&&!(part.material==='wall'&&!this.flags.wall)}
  setTextures(enabled){this.textures=!!enabled;this.flags.textures=this.textures;this.renderer.toneMappingExposure=this.textures ? .95 : 1.4;this.scene.traverse(object=>{if(object.material)setMaterialTextures(object.material,this.textures)});return this.textures}
- layer(name,value){if(name==='textures'){this.setTextures?.(value);return}this.flags[name]=value;if(name==='dimensions')this.dimGroup.visible=value;else if(name==='joints')this.jointGroup.visible=value;else if(name==='fixings')this.fixingGroup.visible=value;else for(const o of this.objects)o.visible=this.isVisible(o.userData.part);if(!this.transform.dragging)this.select(this.selectedIds);this.updateHighlights()}
- setIsolation(ids=null){this.cancelInteraction();this.isolatedIds=Array.isArray(ids)&&ids.length?new Set(ids):null;for(const object of this.objects)object.visible=this.isVisible(object.userData.part);this.select(this.selectedIds);return this.isolatedIds?[...this.isolatedIds]:null}
+ layer(name,value){if(name==='textures'){this.setTextures?.(value);return}this.flags[name]=value;if(name==='dimensions')this.dimGroup.visible=value;else if(name==='joints')this.jointGroup.visible=value;else if(name==='fixings')this.fixingGroup.visible=value;else for(const o of this.objects)o.visible=this.isVisible(o.userData.part);if(!this.transform.dragging)this.select(this.selectedIds);this.invalidateShadows();this.updateHighlights()}
+ setIsolation(ids=null){this.cancelInteraction();this.isolatedIds=Array.isArray(ids)&&ids.length?new Set(ids):null;for(const object of this.objects)object.visible=this.isVisible(object.userData.part);this.select(this.selectedIds);this.invalidateShadows();return this.isolatedIds?[...this.isolatedIds]:null}
  focusSelection(ids=this.selectedIds){
   this.cancelInteraction();const chosen=this.objects.filter(o=>o.visible&&(!ids?.length||ids.includes(o.userData.part.id)));if(!chosen.length)return false;this.scene.updateMatrixWorld(true);const box=new THREE.Box3();chosen.forEach(o=>box.expandByObject(o));const target=box.getCenter(new THREE.Vector3()),size=box.getSize(new THREE.Vector3()),radius=Math.max(size.length()/2,.05),forward=this.camera.getWorldDirection(new THREE.Vector3());
   if(this.camera.isOrthographicCamera){this.camera.position.add(target.clone().sub(this.controls.target));const aspect=(this.camera.right-this.camera.left)/(this.camera.top-this.camera.bottom);this.camera.zoom=(this.camera.top-this.camera.bottom)/(radius*2.5/Math.min(1,aspect));this.camera.updateProjectionMatrix();this.resetOrbitControls(target)}
@@ -453,7 +475,7 @@ export class Viewport {
  view(name){this.cancelInteraction();if(['top','front','side'].includes(name))this.setNavigation('orbit');this.currentView=name;this.camera.up.set(0,name==='top'?0:1,name==='top'?-1:0);const distance=this.navigation==='free'?Math.max(this.span||4.7,(this.span||4.7)/this.freeCamera.aspect)/Math.tan(THREE.MathUtils.degToRad(this.freeCamera.fov/2)):Math.max(this.span||4.7,4)*4;const offset=name==='top'?new THREE.Vector3(0,distance,0):name==='front'?new THREE.Vector3(0,0,-distance):name==='side'?new THREE.Vector3(distance,0,0):new THREE.Vector3(.7,.55,-1).normalize().multiplyScalar(distance);this.camera.position.copy(this.center).add(offset);this.camera.zoom=1;this.camera.lookAt(this.center);this.camera.updateProjectionMatrix();this.camera.updateMatrixWorld();if(this.navigation==='orbit')this.resetOrbitControls(this.center);this.syncNavigation();this.updateAccessibleGizmo()}
  zoom(delta){if(this.navigation==='free'){this.freeNavigation.zoom(delta);return}this.camera.zoom=THREE.MathUtils.clamp(this.camera.zoom*delta,.02,1000);this.camera.updateProjectionMatrix()}
 
- withCommittedTransforms(callback){const original=this.pendingTransform?.snapshot||this.dragSnapshot,panel=this.pendingPanel||this.panelDrag,panelVisible=panel?.object.visible,display=original?{position:this.pivot.position.clone(),quaternion:this.pivot.quaternion.clone(),scale:this.pivot.scale.clone()}:null;if(original)this.restoreTransform(original);if(panel)panel.object.visible=panel.visible;try{return withCleanVisuals(this.scene,callback)}finally{if(display)this.restoreTransform(display);if(panel)panel.object.visible=panelVisible}}
+ withCommittedTransforms(callback){const original=this.pendingTransform?.snapshot||this.dragSnapshot,panel=this.pendingPanel||this.panelDrag,panelVisible=panel?.object.visible,display=original?{position:this.pivot.position.clone(),quaternion:this.pivot.quaternion.clone(),scale:this.pivot.scale.clone()}:null;if(original)this.restoreTransform(original);if(panel)panel.object.visible=panel.visible;this.invalidateShadows?.();try{return withCleanVisuals(this.scene,callback)}finally{if(display)this.restoreTransform(display);if(panel)panel.object.visible=panelVisible;this.invalidateShadows?.()}}
  waitForTextures(){return waitForSurfaceTextures()}
  captureView(options){return captureViewportView(this,options)}
  png(){return this.withCommittedTransforms(()=>{const hidden=[this.transform.getHelper(),this.previewGroup,this.highlightGroup,this.placementGroup,this.guideGroup,this.arrangementGroup,this.selectionMeasureGroup,this.panelHandleGroup],visibility=hidden.map(o=>o.visible);hidden.forEach(o=>o.visible=false);try{this.renderer.render(this.scene,this.camera);return this.canvas.toDataURL('image/png')}finally{hidden.forEach((o,i)=>o.visible=visibility[i])}})}

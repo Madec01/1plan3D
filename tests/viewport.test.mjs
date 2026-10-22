@@ -129,10 +129,42 @@ test('mesure deux clics sur surfaces : distance réelle, aperçu et annulation',
 
 test('sélection et survol : contours indépendants des matériaux, calques respectés',async()=>{
  const parts=[beam('post',[0,0,0],[0,2000,0],{kind:'post',width:100,height:100}),{id:'panel',kind:'panel',material:'mesh',a:[500,0,0],b:[1500,1000,0],corners:[[500,0,0],[1500,0,0],[1500,1000,0],[500,1000,0]],width:1,height:1}];
- const t=setupInteractionViewport(parts),{viewport,pointer,screen}=t;viewport.view('front');pointer('pointermove',...screen([0,1000,-50]));assert.equal(viewport.hovered.userData.part.id,'post');assert.equal(viewport.highlightGroup.children.length,1);
+ const t=setupInteractionViewport(parts),{viewport,pointer,screen}=t;viewport.view('front');pointer('pointermove',...screen([0,1000,-50]));t.renderer.loop();assert.equal(viewport.hovered.userData.part.id,'post');assert.equal(viewport.highlightGroup.children.length,1);
  viewport.select(['post','panel']);assert.equal(viewport.highlightGroup.children.filter(c=>c.userData.selected).length,2);
+ const selectedOutlines=[...viewport.highlightGroup.children];viewport.setHover(null);viewport.setHover(viewport.objects[0]);assert.deepEqual(viewport.highlightGroup.children,selectedOutlines,'le survol conserve les contours sélectionnés et leurs ressources');
  const panel=viewport.objects.find(o=>o.userData.part.id==='panel'),color=panel.material.color.getHex();viewport.select([]);assert.equal(panel.material.color.getHex(),color);
  viewport.setHover(panel);viewport.layer('mesh',false);assert.equal(viewport.highlightGroup.children.find(o=>o.userData.source===panel).visible,false);
+ await t.close();
+});
+
+test('navigation fluide : aucun survol pendant le déplacement de caméra, une recherche par image au repos',async()=>{
+ const t=setupInteractionViewport([beam('P',[0,0,0],[0,2000,0],{kind:'post'})]);const {viewport,pointer,renderer}=t;
+ let picks=0;const pick=viewport.pick.bind(viewport);viewport.pick=event=>{picks++;return pick(event)};
+ const before=viewport.camera.position.clone();
+ pointer('pointerdown',400,300,0,{buttons:1});
+ for(let i=1;i<=100;i++){pointer('pointermove',400+i,300+i/2,0,{buttons:1});renderer.loop()}
+ pointer('pointerup',500,350);assert.equal(picks,0);assert.ok(viewport.camera.position.distanceTo(before)>.01);
+ for(let i=0;i<100;i++)pointer('pointermove',400+i/10,300);
+ assert.equal(picks,0);renderer.loop();assert.equal(picks,1);
+ for(let i=0;i<20;i++)renderer.loop();assert.equal(picks,1,'aucun raycast sans nouveau mouvement du pointeur');
+ pointer('pointermove',400,300);pointer('pointerleave',800,600);renderer.loop();assert.equal(picks,1,'un survol en attente est annulé à la sortie');
+ await t.close();
+});
+
+test('ombres : caméra et survol réutilisent le cache, déplacement/annulation et visibilité le rafraîchissent',async()=>{
+ const t=setupInteractionViewport([beam('P',[0,0,0],[0,2000,0],{kind:'post'}),beam('B',[1000,0,0],[1000,2000,0])]);const {viewport,renderer}=t;
+ let shadowPasses=0;renderer.render=()=>{if(renderer.shadowMap.enabled&&renderer.shadowMap.needsUpdate){shadowPasses++;renderer.shadowMap.needsUpdate=false}};
+ assert.equal(renderer.shadowMap.autoUpdate,false);renderer.loop();assert.equal(shadowPasses,1);
+ const mesh=viewport.objects[0],map=mesh.material[0].map;viewport.scene.updateMatrixWorld(true);const original=mesh.matrixWorld.clone();
+ for(let i=0;i<60;i++){viewport.camera.position.x+=.01;renderer.loop()}
+ viewport.setHover(mesh);renderer.loop();assert.equal(shadowPasses,1);assert.equal(mesh.material[0].map,map);
+ viewport.select(['P']);viewport.setTool('translate');renderer.loop();assert.equal(shadowPasses,1);
+ viewport.transform.dragging=true;viewport.transform.dispatchEvent({type:'mouseDown'});viewport.pivot.position.x+=.1;viewport.transform.dispatchEvent({type:'objectChange'});renderer.loop();assert.equal(shadowPasses,2);
+ viewport.cancelInteraction();renderer.loop();assert.equal(shadowPasses,3);viewport.scene.updateMatrixWorld(true);assert.deepEqual(mesh.matrixWorld.elements,original.elements);
+ viewport.setIsolation(['P']);renderer.loop();assert.equal(shadowPasses,4);viewport.setIsolation(null);renderer.loop();assert.equal(shadowPasses,5);
+ viewport.layer('foundation',false);renderer.loop();assert.equal(shadowPasses,6);
+ viewport.view('top');renderer.loop();assert.equal(shadowPasses,6);viewport.view('iso');renderer.loop();assert.equal(shadowPasses,7);
+ viewport.set(buildProject(t.p),t.p);renderer.loop();assert.equal(shadowPasses,8);
  await t.close();
 });
 

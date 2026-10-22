@@ -1,3 +1,9 @@
+# Fluidité de navigation — 22 octobre 2026
+
+- Les mouvements de caméra réutilisent les ombres existantes ; déplacement, rotation, redimensionnement, annulation, visibilité et exports les rafraîchissent lorsque nécessaire.
+- Survol suspendu pendant le glissement de caméra, recherches regroupées à une par image ; les contours sélectionnés conservent leurs ressources pendant le survol d’autres pièces.
+- Contrôle WebGL sur 24 poteaux texturés, 640 × 400, 30 images de déplacement : 327 → 183 appels de dessin par image (−44 %), captures avant/après identiques. Cette mesure ne constitue pas une promesse de fréquence d’image sur tous les appareils.
+
 # Hébergement GitHub Pages — 22 octobre 2026
 
 - Publication automatique de `dist/` par GitHub Actions après installation verrouillée, tests et compilation, à chaque envoi sur `main` ou lancement manuel.

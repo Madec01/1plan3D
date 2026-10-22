@@ -26,12 +26,13 @@ project={
 with sync_playwright() as p:
  browser=p.chromium.launch(executable_path='/usr/bin/chromium',headless=True,args=['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader'])
  ctx=browser.new_context(viewport={'width':1440,'height':1000},accept_downloads=True)
+ seed='if (!localStorage.getItem("atelier.project.v4")) localStorage.setItem("atelier.project.v4",'+json.dumps(json.dumps(project))+');'
+ ctx.add_init_script(seed)
  page=ctx.new_page();errors=[];external=[]
  page.on('pageerror',lambda e: errors.append(str(e)))
  page.on('request',lambda r:external.append(r.url) if r.url.startswith('http') and urlparse(r.url)[:2] != app_origin else None)
  page.goto(app_url,wait_until='networkidle')
- page.evaluate('(p)=>localStorage.setItem("atelier.project.v4",JSON.stringify(p))',project)
- page.reload(wait_until='networkidle');page.wait_for_function('!!window.Atelier');page.wait_for_timeout(1200)
+ page.wait_for_function('!!window.Atelier');page.wait_for_timeout(1200)
  assert page.locator('.fallback').count()==0
  before=page.evaluate('JSON.stringify(Atelier.getBOM())')
  page.screenshot(path='/tmp/atelier-realistic-scene.png')
@@ -86,8 +87,9 @@ with sync_playwright() as p:
  ctx.set_offline(False)
  # Mobile drawer uses the same controls without horizontal overflow.
  mobile=browser.new_context(viewport={'width':390,'height':844},is_mobile=True,has_touch=True,device_scale_factor=1)
+ mobile.add_init_script(seed)
  m=mobile.new_page();m.on('pageerror',lambda e:errors.append(str(e)))
- m.goto(app_url,wait_until='networkidle');m.evaluate('(p)=>localStorage.setItem("atelier.project.v4",JSON.stringify(p))',project);m.reload(wait_until='networkidle')
+ m.goto(app_url,wait_until='networkidle');m.wait_for_function('!!window.Atelier')
  m.evaluate('Atelier.selectParts(["W"])');m.locator('[data-mobile-sheet="properties"]').click();m.locator('[data-surface-finish="plaster"]').click();m.screenshot(path='/tmp/atelier-mobile.png')
  assert m.evaluate('document.documentElement.scrollWidth <= innerWidth')
  assert not errors, errors
