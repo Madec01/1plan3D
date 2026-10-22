@@ -1,12 +1,15 @@
 /* Atelier sur mesure. Build replaces both tokens; no user projects enter this cache. */
 const VERSION = '0.29.0';
-const BUILD_ID = '1bd2425195d867ccf1ad';
-const PREFIX = 'atelier-app-shell-';
+const BUILD_ID = 'c7575efb9ae292aee6b6';
+// GitHub Pages serves project sites in a subdirectory. Keep assets and cache
+// cleanup inside this installation, even when other apps share the same origin.
+const BASE = new URL('./', self.location.href);
+const PREFIX = `atelier-app-shell-${encodeURIComponent(BASE.pathname)}-`;
 const CACHE_NAME = `${PREFIX}${VERSION}-${BUILD_ID}`;
-const SHELL = '/index.html';
-const ASSETS = [SHELL, '/manifest.webmanifest', '/icon-192.png', '/icon-512.png'];
+const SHELL = new URL('index.html', BASE).pathname;
+const ASSETS = [SHELL, ...['manifest.webmanifest', 'icon-192.png', 'icon-512.png'].map(file => new URL(file, BASE).pathname)];
 const SENTINEL = `<meta name="atelier-app-shell" content="${VERSION}:${BUILD_ID}">`;
-const absolute = path => new URL(path, self.location.origin).href;
+const absolute = path => new URL(path, BASE).href;
 
 async function checkedResponse(response, path) {
   if (!response || response.status !== 200 || response.redirected || response.type === 'opaque' || response.type === 'opaqueredirect') throw new Error('Réponse indisponible ou redirigée.');
@@ -21,7 +24,7 @@ async function checkedResponse(response, path) {
   } else {
     if (!type.includes('application/manifest+json') && !type.includes('application/json')) throw new Error('Manifest indisponible.');
     const manifest = await response.clone().json();
-    if (manifest.id !== '/' || manifest.start_url !== SHELL || !Array.isArray(manifest.icons)) throw new Error('Manifest inattendu.');
+    if (new URL(manifest.id, absolute(path)).href !== BASE.href || new URL(manifest.start_url, absolute(path)).href !== absolute(SHELL) || new URL(manifest.scope, absolute(path)).href !== BASE.href || !Array.isArray(manifest.icons)) throw new Error('Manifest inattendu.');
   }
   return response;
 }
@@ -71,7 +74,7 @@ self.addEventListener('fetch', event => {
   const url = new URL(request.url);
   // Strict allowlist: no API, auth, callback, query-string or cross-origin response is cached.
   if (request.method !== 'GET' || url.origin !== self.location.origin || url.search) return;
-  const navigation = request.mode === 'navigate' && (url.pathname === '/' || url.pathname === SHELL);
+  const navigation = request.mode === 'navigate' && (url.pathname === BASE.pathname || url.pathname === SHELL);
   const asset = ASSETS.includes(url.pathname) && url.pathname !== SHELL;
   if (!navigation && !asset) return;
   if (navigation) {

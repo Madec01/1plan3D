@@ -10,6 +10,7 @@ import {normalizeWorkplane,DEFAULT_WORKPLANE} from './workplane.js';
 import {normalizeFixingLayout} from './fixings.js';
 import {normalizeWorkshop,applyWorkshopBOM} from './materials.js';
 import {normalizeElectrical,electricalRows} from './electrical.js';
+import {normalizeAppearance} from './surface-catalog.js';
 export const SOURCES = legacy.SOURCES;
 export const DEFAULT_PROJECT = { ...legacy.DEFAULT_PROJECT, version: 5, mode: 'parametric', freeParts: [], freeJoints: [], attachments: [], attachmentSettings: {autoAttach:false}, attachmentConflicts: [], placementSurface:'ground', jointOverrides: {}, grid: 1, assistance:{gridMode:'fixed',gridStep:10,gridSnap:false}, precisionVersion: 1, workplane: DEFAULT_WORKPLANE, snap: true, nextId: 1 };
 const src = id => SOURCES.find(s => s.id === id);
@@ -86,6 +87,7 @@ function normalizePart(raw, p, id) {
 export function normalizeProject(input = {}) {
   const v = object(input), p = { ...legacy.normalizeProject(v), version: 5, mode: v.mode === 'free' ? 'free' : 'parametric', grid: num(v.precisionVersion!==1&&v.grid===50?1:v.grid, 1, .1, 1000), precisionVersion: 1, workplane: normalizeWorkplane(v.workplane), snap: typeof v.snap === 'boolean' ? v.snap : true, nextId: Math.floor(num(v.nextId, 1, 1, 1e9)), freeParts: [], freeJoints: [], jointOverrides: {}, importWarnings: [...new Set((Array.isArray(v.importWarnings) ? v.importWarnings : []).slice(0, 100).map(message => str(message, '', 240)).filter(Boolean))] };
   p.placementSurface=choice(v.placementSurface,['ground','face','workplane'],'ground');
+  p.appearance=normalizeAppearance(v.appearance,p.ground);
   p.attachmentSettings={autoAttach:object(v.attachmentSettings).autoAttach===true};
   p.joint = choice(v.joint, ['angle', 'screw', 'bolt', 'hanger', 'plate', 'wood'], legacy.DEFAULT_PROJECT.joint);
   p.workshop = normalizeWorkshop(v.workshop);
@@ -329,6 +331,7 @@ export function duplicateParts(input, ids, delta = [250, 0, 250]) {
   const joints = p.freeJoints.filter(j => map.has(j.aPart) && map.has(j.bPart)).map(j => {const copy=structuredClone(j);if(copy.fixingLayout?.frame?.anchorPartId)copy.fixingLayout.frame.anchorPartId=map.get(copy.fixingLayout.frame.anchorPartId)||copy.fixingLayout.frame.anchorPartId;return {...copy,id:allocate(p,'J'),aPart:map.get(j.aPart),bPart:map.get(j.bPart)}});
   for(const [oldId,newId] of map)if(p.baseFixingLayouts[oldId]){const copy=structuredClone(p.baseFixingLayouts[oldId]);if(copy.frame?.anchorPartId)copy.frame.anchorPartId=newId;p.baseFixingLayouts[newId]=copy}
   for(const [oldId,newId] of map)if(p.manufacturing.cuts[oldId])p.manufacturing.cuts[newId]=structuredClone(p.manufacturing.cuts[oldId]);
+  for(const [oldId,newId] of map)if(p.appearance.parts[oldId])p.appearance.parts[newId]=structuredClone(p.appearance.parts[oldId]);
   p.freeParts.push(...copies); p.freeJoints.push(...joints);
   p.attachments=duplicateAttachments(p.attachments,map,v);
   for(const copy of copies)if(!p.attachments.some(a=>a.sourceId===copy.id)){copy.adaptation='fixed';copy.lengthLocked=true;}
@@ -342,6 +345,7 @@ export function removeParts(input, ids) {
   p.attachments=p.attachments.filter(a=>!selected.has(a.sourceId)&&!a.anchors.some(anchor=>selected.has(anchor.targetId))).map(a=>a.intermediateIds?{...a,intermediateIds:a.intermediateIds.filter(id=>!selected.has(id))}:a);
   for(const part of p.freeParts)if(released.has(part.id)){part.adaptation='fixed';part.lengthLocked=true;}
   for(const id of selected)delete p.manufacturing.cuts[id];
+  for(const id of selected)delete p.appearance.parts[id];
   return normalizeProject(p);
 }
 export function addJoint(input, aPart, bPart, recipe = 'angle') {

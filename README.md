@@ -2,12 +2,38 @@
 
 ## Utilisation et développement
 
-- Ouvrir **dist/index.html** dans un navigateur : le HTML contient le code et les textures procédurales, sans dépendance réseau pour le dessin.
-- Application hébergée : https://atelier-sur-mesure.madec.chatgpt.site
+- Ouvrir **dist/index.html** dans un navigateur : le HTML contient le code et le pack de textures PBR embarquées, sans dépendance réseau pour le dessin.
+- Adresse GitHub Pages après activation : https://madec01.github.io/1plan3D/
 - Sources : https://github.com/Madec01/1plan3D
 - Développement : Node.js 22 ou ultérieur, puis `npm install`, `npm test` et `npm run build`. Le verrou `pnpm-lock.yaml` permet aussi l’installation avec pnpm (`pnpm install --frozen-lockfile`).
 - `src/` contient les modules et l’interface ; `tests/` les tests ; `public/` les fichiers d’installation ; `dist/` la version directement utilisable. `build.mjs` produit le HTML autonome.
 - Les projets restent dans le navigateur. Exporter le JSON pour les transférer ou les sauvegarder ; les projets personnels ne sont pas inclus dans ce dépôt.
+
+## Hébergement GitHub Pages
+
+Le code est conservé dans ce dépôt ; le site utilisable est publié séparément par **GitHub Pages**. Le workflow [Publier sur GitHub Pages](.github/workflows/pages.yml) installe les dépendances verrouillées, lance les tests, compile le HTML avec les textures puis déploie uniquement `dist/` chez GitHub à chaque envoi sur `main`.
+
+Pour la première publication :
+
+1. Dans [Settings → Pages](https://github.com/Madec01/1plan3D/settings/pages), choisir **GitHub Actions** comme source dans **Build and deployment**.
+2. Dans [Actions → Publier sur GitHub Pages](https://github.com/Madec01/1plan3D/actions/workflows/pages.yml), cliquer sur **Run workflow** pour la branche `main` (ou relancer la dernière exécution si elle a échoué avant l’activation de Pages).
+3. Attendre que les étapes `build` et `deploy` soient vertes. Le lien du déploiement ouvre **https://madec01.github.io/1plan3D/**. Un dépôt présent sur `github.com` ne prouve pas que son site Pages est déjà publié.
+
+L’hébergement, le certificat HTTPS et les déploiements sont gérés par GitHub. Aucune clé OpenAI, session ChatGPT, base de données ou machine de développement allumée n’est nécessaire pour utiliser l’application. Le fichier d’ancienne configuration `.openai/hosting.json` a été retiré ; cela ne supprime pas à distance un ancien site déjà publié.
+
+**Projets existants :** les données du navigateur sont propres à chaque adresse. Depuis l’ancienne application, exporter les projets en JSON, puis les importer sur GitHub Pages. Ils ne migrent pas automatiquement et restent enregistrés sur l’appareil, sans synchronisation entre appareils.
+
+En cas de page 404, vérifier la source Pages et le résultat du workflow ci-dessus. Si l’application fonctionne mais affiche une ancienne version, utiliser **Outils → Installer / hors connexion** pour préparer la mise à jour, puis rouvrir l’application.
+
+## Textures réalistes · 22 octobre 2026
+
+- **Propriétés → Apparence** : vignettes de finitions, échelle, rotation et teinte ; une sélection de même famille reçoit la finition en une action.
+- **Afficher** : bascule Réaliste / Schéma, qualité détaillée ou légère et choix du sol, indépendamment du support de fondation.
+- 12 finitions à partir de 9 jeux photographiques CC0 : bois naturel, satiné, lasuré et patiné ; parpaing, pierre, béton et enduit ; herbe, terre avec mousse, terre humide et pavés. Les variantes de finition partagent leurs photographies.
+- Couleur, normales OpenGL et rugosité intégrées au HTML. Les motifs gardent leur taille physique après redimensionnement. Bois de bout procédural sur les extrémités ; le relief ne déplace aucune face.
+- Les apparences suivent les sauvegardes, la duplication, les variantes et l’annulation ; elles ne changent ni les achats ni les recettes de fixation.
+- Validation : 576 tests automatisés réussis ; parcours WebGL, export PNG, rechargement PWA hors connexion et interface 390 × 844 contrôlés dans Chromium logiciel. Essai sur téléphone physique restant à faire.
+- [Sources, licences, échelles et entretien du pack](docs/TEXTURES.md). Les images sources sont vérifiées par SHA-256 et livrées localement ; aucune clé ou connexion externe n’est nécessaire à l’usage.
 
 ## Nouveautés V0.29
 
@@ -16,7 +42,7 @@
 - Empreinte colorée pendant la pose et le déplacement : projection sur le sol ou le support visé, activable dans les aides au placement.
 - Export groupé : sélection des angles 3D, styles d’affichage et plans, réunis dans une archive ZIP.
 - Validation : 567 tests réussis ; plan et export des trois plans contrôlés dans le navigateur. Rendu WebGL restant à vérifier sur appareil.
-- Recherche et proposition pour les textures de murs, sols, béton et bois : [docs/TEXTURES.md](docs/TEXTURES.md). Le pack photographique PBR reste à intégrer.
+- Recherche et proposition pour les textures de murs, sols, béton et bois : [docs/TEXTURES.md](docs/TEXTURES.md). Le premier pack photographique PBR est désormais intégré (voir ci-dessus).
 
 ## Interface V0.28
 

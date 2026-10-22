@@ -1,3 +1,19 @@
+# Hébergement GitHub Pages — 22 octobre 2026
+
+- Publication automatique de `dist/` par GitHub Actions après installation verrouillée, tests et compilation, à chaque envoi sur `main` ou lancement manuel.
+- Manifeste, icônes et service worker compatibles avec le sous-dossier `/1plan3D/` et l’hébergement à la racine ; caches isolés par dossier d’installation.
+- Suppression de la configuration d’hébergement OpenAI du dépôt et documentation de l’activation de GitHub Pages, du suivi du déploiement et du transfert des projets JSON.
+
+# Textures réalistes — 22 octobre 2026
+
+- Premier pack CC0 embarqué : 12 finitions, 9 jeux photographiques de Poly Haven et ambientCG, avec couleur, normales OpenGL et rugosité.
+- Choix par vignettes dans les propriétés, application à la sélection, échelle, rotation et teinte ; sol dans Afficher, modes Réaliste / Schéma et qualité légère.
+- UV en mètres, veinage longitudinal, bois de bout distinct, maps photographiques partagées et libérées au dernier utilisateur.
+- Sauvegarde, duplication et annulation des apparences ; support porteur, dimensions, achats et recettes conservés.
+- Export PNG et ZIP attendent le décodage des textures locales. HTML autonome et cache PWA incluent le pack sans téléchargement séparé.
+- Corrections d’accès mobile : notifications sans interception des clics et panneau Propriétés au-dessus de son fond de fermeture.
+- Validation : 576 tests réussis ; WebGL, export PNG, rechargement PWA hors connexion et interface mobile simulée contrôlés sans erreur JavaScript ni requête externe de texture.
+
 # V0.29 — Placement, plans et exports — 22 octobre 2026
 
 - Correction de l’ajout depuis la capsule : la pose démarre aussi lorsqu’aucune fenêtre n’est ouverte.

@@ -1,4 +1,7 @@
 import * as THREE from 'three';
+import {surfaceForPart,normalizeAppearance} from './surface-catalog.js';
+import {applySurfaceUV,assignTimberEndGrain} from './surface-uv.js';
+import {waitForSurfaceTextures} from './surface-textures.js';
 import {captureViewportView} from './view-export.js';
 import {buildJointFixings,getFoundationJoints,createFixingGeometry} from './fixings.js';
 import { FreeNavigation, perspectiveFromOrtho,orthographicFromPerspective,accessiblePivotPosition,gizmoSizeForPixels,keyboardCameraFrame } from './camera-navigation.js';
@@ -13,7 +16,7 @@ import {createPlacementShadow} from './placement-shadow.js';
 import {betweenMeasurements} from './between-placement.js';
 import {findObjectSnap,objectSnapTranslationIsValid} from './object-snapping.js';
 import {panelResizeFrame,resizePanelFromDrag,intersectPanelResizePlane,surfaceResizePatch,resizeScreenDelta} from './panel-resize.js';
-import {createPartMaterial,createGroundMaterial,applyWoodGrainUV,setMaterialTextures,disposeVisualMaterial,createFocusOverlay,createFeedbackMarker,createContactFaceOverlay,withCleanVisuals} from './viewport-visuals.js';
+import {createPartMaterial,createGroundMaterial,setMaterialTextures,disposeVisualMaterial,createFocusOverlay,createFeedbackMarker,createContactFaceOverlay,withCleanVisuals} from './viewport-visuals.js';
 
 export class Viewport {
  constructor(canvas,onSelect,onTransform,createRenderer=options=>new THREE.WebGLRenderer(options)){
@@ -360,27 +363,30 @@ export class Viewport {
   this.cancelInteraction();this.previewPlacement([],null);this.clearArrangementPreview();this.clear(this.guideGroup);this.clear(this.selectionMeasureGroup);this.hovered=null;this.clear(this.highlightGroup);this.release();this.model=model;this.project=p;this.clear(this.group);this.clear(this.dimGroup);this.clear(this.jointGroup);this.clear(this.fixingGroup);this.fixingObjects=[];this.objects=[];
   const bounds=model.bounds||{min:[-p.width/2,0,-p.depth/2],max:[p.width/2,p.height,p.depth/2],width:p.width,depth:p.depth,height:p.height};this.bounds=bounds;
   this.center.set(...bounds.min.map((v,i)=>(v+bounds.max[i])/2000));this.span=Math.max(bounds.width,bounds.depth,bounds.height*1.4,2000)/1000*.65+.6;this.resize();this.freeNavigation.scale=Math.max(1,this.span);this.setWorkplane(p.workplane);
-  disposeVisualMaterial(this.ground.material);this.ground.material=createGroundMaterial({textures:this.textures,kind:p.ground==='concrete'||p.ground==='pavers'?'concrete':'grass'});
+  const appearance=normalizeAppearance(p.appearance,p.ground);this.textures=appearance.mode==='realistic';this.renderer.toneMappingExposure=this.textures ? .95 : 1.4;
+  const materialFor=part=>createPartMaterial(part,{species:p.material,textures:this.textures,appearance:surfaceForPart(part,p),quality:appearance.quality});
+  disposeVisualMaterial(this.ground.material);this.ground.material=createGroundMaterial({textures:this.textures,appearance:appearance.ground,quality:appearance.quality});
+  applySurfaceUV(this.ground.geometry,{material:'ground'},appearance.ground);
   for(const part of model.parts){let mesh;const a=new THREE.Vector3(...part.a).multiplyScalar(.001),b=new THREE.Vector3(...part.b).multiplyScalar(.001),dir=b.clone().sub(a),length=dir.length();
-   if(part.material==='wood'&&part.kind==='panel'){mesh=new THREE.Mesh(panelGeometry(part),createPartMaterial(part,{species:p.material,textures:this.textures}));mesh.castShadow=true;mesh.receiveShadow=true;}else if(part.material==='wood'){
-    mesh=new THREE.Mesh(new THREE.BoxGeometry(part.width/1000,part.height/1000,Math.max(length,.001)),createPartMaterial(part,{species:p.material,textures:this.textures}));mesh.position.copy(a).add(b).multiplyScalar(.5);mesh.quaternion.copy(timberQuaternion(part));mesh.castShadow=true;mesh.receiveShadow=true;
+   if(part.material==='wood'&&part.kind==='panel'){mesh=new THREE.Mesh(panelGeometry(part),materialFor(part));mesh.castShadow=true;mesh.receiveShadow=true;}else if(part.material==='wood'){
+    mesh=new THREE.Mesh(new THREE.BoxGeometry(part.width/1000,part.height/1000,Math.max(length,.001)),materialFor(part));mesh.position.copy(a).add(b).multiplyScalar(.5);mesh.quaternion.copy(timberQuaternion(part));mesh.castShadow=true;mesh.receiveShadow=true;
     mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry),new THREE.LineBasicMaterial({color:0x876e4c,transparent:true,opacity:.38})));
    }else if(part.material==='wall'){
-    mesh=new THREE.Mesh(new THREE.BoxGeometry(Math.max(length,.001),part.height/1000,(part.wallThickness||part.width||200)/1000),createPartMaterial(part,{textures:this.textures}));mesh.position.copy(a).add(b).multiplyScalar(.5);mesh.position.y+=part.height/2000;mesh.rotation.y=-Math.atan2(dir.z,dir.x);
+    mesh=new THREE.Mesh(new THREE.BoxGeometry(Math.max(length,.001),part.height/1000,(part.wallThickness||part.width||200)/1000),materialFor(part));mesh.position.copy(a).add(b).multiplyScalar(.5);mesh.position.y+=part.height/2000;mesh.rotation.y=-Math.atan2(dir.z,dir.x);
     mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry),new THREE.LineBasicMaterial({color:0x8a8d84,transparent:true,opacity:.6})));
    }else if(part.material==='mesh'){
     if(!part.surfaceWidth||!part.surfaceHeight)continue;const tx=document.createElement('canvas');tx.width=64;tx.height=64;const c=tx.getContext('2d');c.strokeStyle='rgba(80,95,81,.68)';c.lineWidth=1.8;c.strokeRect(0,0,64,64);const tex=new THREE.CanvasTexture(tx);tex.wrapS=tex.wrapT=THREE.RepeatWrapping;tex.repeat.set(part.surfaceWidth/80,part.surfaceHeight/80);
     mesh=new THREE.Mesh(panelGeometry(part),new THREE.MeshBasicMaterial({map:tex,transparent:true,side:THREE.DoubleSide,depthWrite:false,opacity:.65}));
    }else if(part.material==='roof'){
-    mesh=new THREE.Mesh(panelGeometry(part),createPartMaterial(part,{textures:this.textures}));mesh.castShadow=true;
+    mesh=new THREE.Mesh(panelGeometry(part),materialFor(part));mesh.castShadow=true;
    }else if(part.material==='concrete'){
-    const dims=part.boxDim||[p.footingWidth,p.footingDepth,p.footingWidth];mesh=new THREE.Mesh(new THREE.BoxGeometry(...dims.map(v=>v/1000)),createPartMaterial(part,{textures:this.textures}));mesh.position.copy(a).add(b).multiplyScalar(.5);
+    const dims=part.boxDim||[p.footingWidth,p.footingDepth,p.footingWidth];mesh=new THREE.Mesh(new THREE.BoxGeometry(...dims.map(v=>v/1000)),materialFor(part));mesh.position.copy(a).add(b).multiplyScalar(.5);
     const outline=new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry),new THREE.LineDashedMaterial({color:0x929c8c,transparent:true,opacity:.6,depthTest:false,dashSize:.06,gapSize:.04}));outline.computeLineDistances();outline.renderOrder=2;mesh.add(outline);
    }else if(part.material==='metal'){
     const size=(part.width||p.postSection+30)/1000;mesh=new THREE.Mesh(new THREE.BoxGeometry(size,.004,size),new THREE.MeshStandardMaterial({color:0xb3bec3,metalness:.3,roughness:.46}));mesh.position.set(a.x,a.y+.002,a.z);
     for(const sign of [-1,1]){const cheek=new THREE.Mesh(new THREE.BoxGeometry(.006,.09,size),new THREE.MeshStandardMaterial({color:0xb3bec3,metalness:.3,roughness:.46}));cheek.position.set(sign*(size/2-.012),.047,0);mesh.add(cheek)}
    }
-   if(mesh){if(part.material==='wood')applyWoodGrainUV(mesh.geometry,part);mesh.userData.part=part;mesh.name=part.id;mesh.visible=this.isVisible(part);this.group.add(mesh);this.objects.push(mesh)}
+   if(mesh){if(['wood','wall','concrete','roof'].includes(part.material)){applySurfaceUV(mesh.geometry,part,surfaceForPart(part,p));if(part.material==='wood'&&part.kind!=='panel'){assignTimberEndGrain(mesh.geometry);mesh.material=[mesh.material,createPartMaterial(part,{species:p.material,textures:this.textures,appearance:surfaceForPart(part,p),endGrain:true})];}}mesh.userData.part=part;mesh.name=part.id;mesh.visible=this.isVisible(part);this.group.add(mesh);this.objects.push(mesh)}
   }
   for(const joint of model.joints){if(!joint.position)continue;const dot=new THREE.Mesh(new THREE.SphereGeometry(.045,10,10),new THREE.MeshBasicMaterial({color:0xc48b45,depthTest:false}));dot.position.set(...joint.position.map(v=>v/1000));dot.userData.part={...joint,kind:'joint'};dot.renderOrder=5;this.jointGroup.add(dot)}this.jointGroup.visible=this.flags.joints;
   for(const joint of [...model.joints,...getFoundationJoints(model,p)])for(const fixing of buildJointFixings(joint,model)){
@@ -401,7 +407,7 @@ export class Viewport {
  select(ids=[]){
   if(this.transform.dragging)return;if(this.pendingTransform)this.cancelInteraction();this.release();this.selectedFixing=null;for(const o of this.fixingObjects||[])o.material.emissive?.set(0);this.selectedIds=(Array.isArray(ids)?ids:[ids]).filter(Boolean);
   const editable=this.project?.mode==='free'?this.objects.filter(o=>o.visible&&this.selectedIds.includes(o.userData.part.id)&&this.project.freeParts.some(p=>p.id===o.userData.part.id)):[];
-  for(const o of this.objects){const selected=this.selectedIds.includes(o.userData.part?.id);if(o.material.emissive)o.material.emissive.set(selected?0x102b35:0)}
+  for(const o of this.objects){const selected=this.selectedIds.includes(o.userData.part?.id);for(const material of [].concat(o.material))material.emissive?.set(selected?0x102b35:0)}
   if(editable.length){const box=new THREE.Box3();for(const o of editable)box.expandByObject(o);box.getCenter(this.pivot.position);this.naturalPivot=this.pivot.position.clone();if(this.tool==='translate'&&this.project.workplane?.lock)this.pivot.quaternion.copy(workplaneFrame(this.project.workplane).quaternion);this.pivot.updateMatrixWorld(true);for(const o of editable)this.pivot.attach(o);this.configureTransform()}this.rebuildHighlights();this.showSelectionMeasurements();this.refreshPanelHandles?.();
  }
  showSelectionMeasurements(moving=null){
@@ -435,7 +441,7 @@ export class Viewport {
  configureTransform(){const tool=this.tool;this.transform.detach();if(this.interaction||this.pendingTransform||this.project?.mode!=='free'||!this.pivot.children.length||!['translate','rotate'].includes(tool))return;const locked=tool==='translate'&&this.project.workplane?.lock;this.transform.setMode(tool);this.transform.setSpace(locked?'local':'world');this.transform.showX=this.transform.showZ=tool!=='rotate';this.transform.showY=!locked;this.transform.setTranslationSnap(null);this.transform.setRotationSnap(this.project.snap?Math.PI/12:null);this.transform.attach(this.pivot);this.updateAccessibleGizmo()}
 
  isVisible(part){return (!this.isolatedIds||this.isolatedIds.has(part.id))&&this.flags[part.group]!==false&&!(part.material==='mesh'&&!this.flags.mesh)&&!(part.material==='wall'&&!this.flags.wall)}
- setTextures(enabled){this.textures=!!enabled;this.flags.textures=this.textures;this.scene.traverse(object=>{if(object.material)setMaterialTextures(object.material,this.textures)});return this.textures}
+ setTextures(enabled){this.textures=!!enabled;this.flags.textures=this.textures;this.renderer.toneMappingExposure=this.textures ? .95 : 1.4;this.scene.traverse(object=>{if(object.material)setMaterialTextures(object.material,this.textures)});return this.textures}
  layer(name,value){if(name==='textures'){this.setTextures?.(value);return}this.flags[name]=value;if(name==='dimensions')this.dimGroup.visible=value;else if(name==='joints')this.jointGroup.visible=value;else if(name==='fixings')this.fixingGroup.visible=value;else for(const o of this.objects)o.visible=this.isVisible(o.userData.part);if(!this.transform.dragging)this.select(this.selectedIds);this.updateHighlights()}
  setIsolation(ids=null){this.cancelInteraction();this.isolatedIds=Array.isArray(ids)&&ids.length?new Set(ids):null;for(const object of this.objects)object.visible=this.isVisible(object.userData.part);this.select(this.selectedIds);return this.isolatedIds?[...this.isolatedIds]:null}
  focusSelection(ids=this.selectedIds){
@@ -448,6 +454,7 @@ export class Viewport {
  zoom(delta){if(this.navigation==='free'){this.freeNavigation.zoom(delta);return}this.camera.zoom=THREE.MathUtils.clamp(this.camera.zoom*delta,.02,1000);this.camera.updateProjectionMatrix()}
 
  withCommittedTransforms(callback){const original=this.pendingTransform?.snapshot||this.dragSnapshot,panel=this.pendingPanel||this.panelDrag,panelVisible=panel?.object.visible,display=original?{position:this.pivot.position.clone(),quaternion:this.pivot.quaternion.clone(),scale:this.pivot.scale.clone()}:null;if(original)this.restoreTransform(original);if(panel)panel.object.visible=panel.visible;try{return withCleanVisuals(this.scene,callback)}finally{if(display)this.restoreTransform(display);if(panel)panel.object.visible=panelVisible}}
+ waitForTextures(){return waitForSurfaceTextures()}
  captureView(options){return captureViewportView(this,options)}
  png(){return this.withCommittedTransforms(()=>{const hidden=[this.transform.getHelper(),this.previewGroup,this.highlightGroup,this.placementGroup,this.guideGroup,this.arrangementGroup,this.selectionMeasureGroup,this.panelHandleGroup],visibility=hidden.map(o=>o.visible);hidden.forEach(o=>o.visible=false);try{this.renderer.render(this.scene,this.camera);return this.canvas.toDataURL('image/png')}finally{hidden.forEach((o,i)=>o.visible=visibility[i])}})}
  obj(){return this.withCommittedTransforms(()=>{this.scene.updateMatrixWorld(true);const root=new THREE.Group();root.add(this.group.clone(),this.fixingGroup.clone());for(const source of this.pivot.children){const clone=source.clone();source.matrixWorld.decompose(clone.position,clone.quaternion,clone.scale);root.add(clone)}return new OBJExporter().parse(root)})}

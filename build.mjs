@@ -14,7 +14,7 @@ const hash=createHash('sha256').update(version).update(base).update(worker);
 for(const file of publicFiles)hash.update(await readFile(`public/${file}`));
 const buildId=hash.digest('hex').slice(0,20);
 // Assets are linked only on the hosted app. The downloaded HTML remains self-contained.
-const hostedLinks=`<meta name="atelier-app-shell" content="${version}:${buildId}"><script>(function(){if(!/^https?:$/.test(location.protocol))return;var d=document;[['manifest','/manifest.webmanifest'],['apple-touch-icon','/icon-192.png']].forEach(function(x){var l=d.createElement('link');l.rel=x[0];l.href=x[1];d.head.appendChild(l)});})();</script>`;
+const hostedLinks=`<meta name="atelier-app-shell" content="${version}:${buildId}"><script>(function(){if(!/^https?:$/.test(location.protocol))return;var d=document;[['manifest','./manifest.webmanifest'],['apple-touch-icon','./icon-192.png']].forEach(function(x){var l=d.createElement('link');l.rel=x[0];l.href=x[1];d.head.appendChild(l)});})();</script>`;
 const html=base.replace('</head>',()=>`${hostedLinks}</head>`);
 await mkdir('dist',{recursive:true});await writeFile('dist/index.html',html);
 await writeFile('dist/sw.js',worker.replaceAll('__ATELIER_VERSION__',version).replaceAll('__ATELIER_BUILD_ID__',buildId));

@@ -52,7 +52,7 @@ export function setupSceneChrome({document:doc=globalThis.document,getContext=()
   const target=event.target?.closest?.('button,summary');if(!target)return;
   const menu=target.closest(MENUS);
   if(target.tagName==='SUMMARY'&&menu&&target.parentElement===menu){if(!menu.open){closeMenus(menu);onCloseContext();}return;}
-  if(menu&&target.tagName==='BUTTON'&&!target.disabled&&!target.matches('[data-layer],[data-layer-preset],[data-step]')){
+  if(menu&&target.tagName==='BUTTON'&&!target.disabled&&!target.matches('[data-layer],[data-layer-preset],[data-step],[data-surface-finish]')){
    // A setting form stays open for repeated adjustments. Commands close immediately.
    if(!target.closest('.scene-settings-body')||target.matches('[data-editor],[data-assist-action],[data-preset],[data-attachment-action]'))menu.open=false;
   }
@@ -76,7 +76,7 @@ export const sceneChromeStyles=`
 /* V0.28: fixed capsules, non-destructive drawers, and one transient menu. */
 .scene-capsule{display:none}.drawer-controls{display:none}.view-menu>summary{list-style:none;cursor:pointer}.view-menu>summary::-webkit-details-marker{display:none}.view-menu{position:relative}.view-menu-panel{position:absolute;top:calc(100% + 9px);left:0;right:auto;min-width:245px;padding:12px;background:#fffefa;border:1px solid #ccd7c4;border-radius:12px;box-shadow:0 12px 32px #243e2926;z-index:32}.view-menu-panel .segmented{display:flex}.view-menu-panel .navigation-mode{display:flex!important}.view-menu-panel .menu-label{display:block;margin:12px 0 7px}.view-menu-panel .view-utilities{display:flex;align-items:center;gap:6px;margin-top:10px}.view-menu-panel .view-orientation{display:block;margin-top:10px;font-size:11px}.view-menu>summary{display:flex;align-items:center;gap:8px;padding:9px 12px;background:#fffefa;border:1px solid #ccd7c4;border-radius:9px;font-size:12px;min-height:38px}
 body.compact-scene:not(.mobile-ui) .app-shell{grid-template-columns:76px minmax(0,1fr)}
-body.compact-scene .scene-area{isolation:isolate}
+body.compact-scene:not(.mobile-ui) .scene-area{isolation:isolate}
 body.compact-scene .scene-capsule{display:flex;align-items:center;gap:3px;position:absolute;z-index:25;border:1px solid #cdd8c5;border-radius:13px;padding:4px;background:#fffefa;box-shadow:0 3px 12px #243e2914}
 body.compact-scene .scene-create{top:14px;left:14px}
 .scene-capsule button,.scene-capsule summary{min-height:36px;padding:8px 11px;border:0;background:transparent;color:#34553b;border-radius:8px;font:inherit;font-size:12px;cursor:pointer;white-space:nowrap}

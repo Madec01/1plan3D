@@ -68,6 +68,18 @@ test('batch creates real independent SVG plans, requested PNGs and escaped galle
   await assert.rejects(buildViewArchive({project,model,viewport,selection:{views:['front']},document,cancelled:()=>true}),/annulé/);
  }finally{await window.happyDOM.close();}
 });
+test('PNG waits for texture decoding, while SVG-only export stays independent of texture failures',async()=>{
+ const window=new Window(),document=window.document,project=normalizeProject(DEFAULT_PROJECT),model=buildProject(project);
+ let release,captures=0;const ready=new Promise(resolve=>{release=resolve;});
+ const viewport={waitForTextures:()=>ready,captureView(){captures++;return 'data:image/png;base64,AQID';}};
+ try{
+  const pending=buildViewArchive({project,model,viewport,selection:{views:['front']},document});
+  await Promise.resolve();assert.equal(captures,0);release();await pending;assert.equal(captures,1);
+  viewport.waitForTextures=()=>Promise.reject(new Error('Texture illisible'));
+  await assert.rejects(buildViewArchive({project,model,viewport,selection:{views:['front']},document}),/Texture illisible/);
+  const plans=await buildViewArchive({project,model,viewport,selection:{plans:['top']},document});assert.equal(plans.count,1);assert.equal(captures,1);
+ }finally{release();await window.happyDOM.close();}
+});
 test('batch UI remains usable for plan export when WebGL is unavailable',async()=>{
  const window=new Window(),document=window.document,dialog=document.createElement('dialog');document.body.append(dialog);let downloaded;
  const project=normalizeProject(DEFAULT_PROJECT),model=buildProject(project);try{

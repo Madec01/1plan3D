@@ -1,7 +1,8 @@
 import * as THREE from 'three';
+import {createPhotoMaterial,surfaceEndColor} from './surface-textures.js';
 
-// No DOM, canvas or network is needed. The material owns its GPU textures; only
-// immutable pixel templates are shared between pieces.
+// Procedural maps need no DOM. Photographic maps decode embedded images in the
+// browser and share reference-counted GPU textures (see surface-textures.js).
 const TAU = Math.PI * 2;
 const pixelTemplates = new Map();
 const resources = new WeakMap();
@@ -86,24 +87,38 @@ function snapshot(material) {
   return {color: material.color?.clone(), emissive: material.emissive?.clone(), opacity: material.opacity, transparent: material.transparent, depthTest: material.depthTest, depthWrite: material.depthWrite, toneMapped: material.toneMapped, wireframe: material.wireframe, map: material.map};
 }
 function trackMaterial(material, texture = null, enabled = true) {
-  const record = {owned: new Set(texture ? [texture] : []), original: snapshot(material), texture: texture || material.map, textures: enabled, feedback: null};
+  const record = {owned: new Set(texture ? [texture] : []), original: snapshot(material), texture: texture || material.map, maps:{map:texture||material.map,normalMap:material.normalMap,roughnessMap:material.roughnessMap}, textures: enabled, feedback: null};
   resources.set(material, record);
   material.userData.atelierVisualMaterial = true;
   material.addEventListener('dispose', () => { for (const map of record.owned) disposeTexture(map); record.owned.clear(); disposedMaterials.add(material); });
-  if (!enabled) material.map = null;
+  applyTrackedMaps(material,record);
   return material;
 }
+function applyTrackedMaps(material,record){
+  const enabled=record.textures&&!record.feedback;
+  for(const [key,map] of Object.entries(record.maps))if(map!==undefined)material[key]=enabled?map:null;
+  if(!record.feedback&&material.userData.schematicColor!==undefined){
+    if(record.textures)material.color.copy(record.original.color);
+    else material.color.set(material.userData.schematicColor);
+  }
+}
 
-export function createPartMaterial(part = {}, {species, textures = true} = {}) {
+export function createPartMaterial(part = {}, {species, textures = true,appearance,quality='standard',endGrain=false} = {}) {
   const type = part.material || (part.kind === 'wall' ? 'wall' : 'wood');
   const textureKind = type === 'wood' ? 'wood' : ['wall', 'concrete'].includes(type) ? 'concrete' : null;
   const color = type === 'wood' ? woodColors[part.species || species] || woodColors.pin : type === 'wall' ? 0xc5c4bc : type === 'concrete' ? 0xb6bab1 : type === 'metal' ? 0x929da2 : type === 'roof' ? 0x77846f : 0xc4c7be;
+  if(appearance&&!endGrain){
+    const material=createPhotoMaterial(appearance,{quality,schematicColor:color,side:part.kind==='panel'||part.corners?THREE.DoubleSide:THREE.FrontSide});
+    material.userData.surface=type;return trackMaterial(material,null,textures);
+  }
   const map = textureKind ? createSurfaceTexture(textureKind) : null;
-  const material = new THREE.MeshStandardMaterial({color, map, roughness: type === 'metal' ? .48 : type === 'wood' ? .88 : 1, metalness: type === 'metal' ? .5 : 0, side: part.kind === 'panel' || part.corners ? THREE.DoubleSide : THREE.FrontSide, transparent: false, opacity: 1, depthWrite: true});
+  const material = new THREE.MeshStandardMaterial({color:appearance&&endGrain?surfaceEndColor(appearance):color, map, roughness: type === 'metal' ? .48 : type === 'wood' ? .88 : 1, metalness: type === 'metal' ? .5 : 0, side: part.kind === 'panel' || part.corners ? THREE.DoubleSide : THREE.FrontSide, transparent: false, opacity: 1, depthWrite: true});
+  if(appearance&&endGrain)material.userData.schematicColor=color;
   material.userData.surface = type;
   return trackMaterial(material, map, textures);
 }
-export function createGroundMaterial({textures = true, kind = 'grass', size = 200} = {}) {
+export function createGroundMaterial({textures = true, kind = 'grass', size = 200,appearance,quality='standard'} = {}) {
+  if(appearance)return trackMaterial(createPhotoMaterial(appearance,{quality,schematicColor:0xdce2ce}),null,textures);
   kind = ['earth', 'soil'].includes(kind) ? 'earth' : ['concrete', 'pavers'].includes(kind) ? 'concrete' : 'grass';
   const repeat = clamp(Number(size) || 200, .1, 1000) / 2;
   const map = createSurfaceTexture(kind, {repeat: [repeat, repeat]});
@@ -142,7 +157,7 @@ export function setMaterialTextures(material, enabled) {
     const record = resources.get(item);
     if (!record || disposedMaterials.has(item)) continue;
     record.textures = !!enabled;
-    item.map = !record.feedback && record.textures ? record.texture : null;
+    applyTrackedMaps(item,record);
     item.needsUpdate = true;
   }
 }
@@ -152,7 +167,11 @@ export function setMaterialFeedback(material, state = null) {
     if (disposedMaterials.has(item)) continue;
     let record = resources.get(item);
     if (!record) { trackMaterial(item); record = resources.get(item); }
-    if (state && !record.feedback) record.original = snapshot(item);
+    if (state && !record.feedback) {
+      const color=record.original.color;
+      record.original = snapshot(item);
+      if(item.userData.schematicColor!==undefined)record.original.color=color;
+    }
     record.feedback = state;
     const original = record.original;
     if (state) {
@@ -164,8 +183,8 @@ export function setMaterialFeedback(material, state = null) {
       if (original.emissive) item.emissive.copy(original.emissive);
       for (const key of ['opacity', 'transparent', 'depthTest', 'depthWrite', 'toneMapped']) item[key] = original[key];
       if (original.wireframe !== undefined) item.wireframe = original.wireframe;
-      item.map = record.textures ? record.texture : null;
     }
+    applyTrackedMaps(item,record);
     item.userData.feedbackState = state; item.needsUpdate = true;
   }
 }

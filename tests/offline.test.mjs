@@ -10,7 +10,7 @@ const manifest = await readFile(new URL('../public/manifest.webmanifest', import
 const icon192 = await readFile(new URL('../public/icon-192.png', import.meta.url));
 const icon512 = await readFile(new URL('../public/icon-512.png', import.meta.url));
 const origin = 'https://atelier.test';
-const cacheName = id => `atelier-app-shell-0.18.0-${id}`;
+const cacheName = (id, base = '/') => `atelier-app-shell-${encodeURIComponent(base)}-0.18.0-${id}`;
 const shell = id => `<!DOCTYPE html><html><head><meta name="atelier-app-shell" content="0.18.0:${id}"></head><body>Atelier ${id}</body></html>`;
 function memoryCaches() {
   const stores = new Map();
@@ -20,15 +20,16 @@ function memoryCaches() {
     return {async match(key) { return store.get(String(key))?.clone(); }, async put(key, value) { store.set(String(key), value.clone()); }, async delete(key) { return store.delete(String(key)); }};
   }};
 }
-function workerEnv({id = 'one', caches = memoryCaches(), network} = {}) {
+function workerEnv({id = 'one', base = '/', caches = memoryCaches(), network} = {}) {
   const events = new Map(), fetched = [];
   let skipped = 0, claimed = 0;
-  const responseFor = path => path === '/index.html' || path === '/' ? new Response(shell(id), {headers: {'Content-Type':'text/html; charset=utf-8'}})
-    : path === '/manifest.webmanifest' ? new Response(manifest, {headers: {'Content-Type':'application/manifest+json'}})
-    : new Response(path === '/icon-192.png' ? icon192 : icon512, {headers: {'Content-Type':'image/png'}});
+  const responseFor = path => path === `${base}index.html` || path === base ? new Response(shell(id), {headers: {'Content-Type':'text/html; charset=utf-8'}})
+    : path === `${base}manifest.webmanifest` ? new Response(manifest, {headers: {'Content-Type':'application/manifest+json'}})
+    : path === `${base}icon-192.png` || path === `${base}icon-512.png` ? new Response(path === `${base}icon-192.png` ? icon192 : icon512, {headers: {'Content-Type':'image/png'}})
+    : new Response('Not found', {status:404});
   let handler = network || ((input) => responseFor(new URL(typeof input === 'string' ? input : input.url).pathname));
   const fetch = async (input, options) => { fetched.push({input, options}); return handler(input, options); };
-  const self = {location: {origin}, clients: {async claim() { claimed++; }}, async skipWaiting() { skipped++; }, addEventListener(type, fn) { events.set(type, fn); }};
+  const self = {location: {origin, href:`${origin}${base}sw.js`}, clients: {async claim() { claimed++; }}, async skipWaiting() { skipped++; }, addEventListener(type, fn) { events.set(type, fn); }};
   vm.runInNewContext(workerSource.replaceAll('__ATELIER_VERSION__','0.18.0').replaceAll('__ATELIER_BUILD_ID__',id), {self, caches, fetch, URL, Response, Uint8Array, Promise, Error});
   async function lifecycle(type, extra = {}) {
     const waits = []; events.get(type)?.({waitUntil: promise => waits.push(promise), ...extra}); await Promise.all(waits);
@@ -121,6 +122,39 @@ test('PWA : nouvelle version attend une action ; activation nettoie seulement le
   assert.deepEqual((await next.caches.keys()).sort(), ['autre-application',cacheName('two')].sort());
 });
 
+test('PWA GitHub Pages : fichiers et navigation hors connexion limités au sous-dossier', async () => {
+  const base = '/1plan3D/', env = workerEnv({base});
+  await env.install(); await env.activate();
+  assert.deepEqual(env.fetched.map(call => new URL(call.input).pathname).sort(), ['icon-192.png','icon-512.png','index.html','manifest.webmanifest'].map(file => base + file));
+  assert.equal((await env.message('ATELIER_OFFLINE_STATUS')).ready, true);
+  env.network(() => { throw new TypeError('offline'); });
+  for (const path of [base, `${base}index.html`]) assert.match(await (await env.request(path)).text(), /Atelier one/);
+  assert.equal((await env.request(`${base}icon-192.png`, {mode:'no-cors'})).headers.get('content-type'), 'image/png');
+  for (const path of ['/','/index.html','/icon-192.png','/other/index.html',`${base}login`,`${base}?token=secret`]) assert.equal(await env.request(path), undefined, path);
+});
+
+test('PWA GitHub Pages : une mise à jour ne supprime pas le cache d’un autre déploiement', async () => {
+  const root = workerEnv(), pages = workerEnv({base:'/1plan3D/',caches:root.caches});
+  await root.install(); await pages.install();
+  const next = workerEnv({id:'two',base:'/1plan3D/',caches:root.caches});
+  await next.install(); await next.activate();
+  assert.equal((await root.message('ATELIER_OFFLINE_STATUS')).ready, true);
+  assert.equal((await next.message('ATELIER_OFFLINE_STATUS')).ready, true);
+  assert.deepEqual((await root.caches.keys()).sort(), [cacheName('one'),cacheName('two','/1plan3D/')].sort());
+  const nextRoot = workerEnv({id:'two',caches:root.caches});
+  await nextRoot.install(); await nextRoot.activate();
+  assert.equal((await next.message('ATELIER_OFFLINE_STATUS')).ready, true);
+});
+
+test('PWA GitHub Pages : un manifeste d’un autre chemin est refusé', async () => {
+  const env = workerEnv({base:'/1plan3D/'});
+  env.network(input => new URL(input).pathname.endsWith('/manifest.webmanifest')
+    ? new Response(JSON.stringify({...JSON.parse(manifest), start_url:'/index.html'}), {headers:{'Content-Type':'application/manifest+json'}})
+    : env.responseFor(new URL(input).pathname));
+  await assert.rejects(env.install(), /Manifest inattendu/);
+  assert.deepEqual(await env.caches.keys(), []);
+});
+
 function browserEnv({url = `${origin}/`, ios = false, secure = true, supported = true, cached = true, failed = false, waiting = false, persistGranted = true, beforeUpdate} = {}) {
   const window = new Window({url});
   Object.defineProperty(window,'isSecureContext',{configurable:true,value:secure});
@@ -205,6 +239,15 @@ test('UI installation : bouton seulement avec prompt réel, report et installati
   await ios.close();
 });
 
+test('UI GitHub Pages : inscription du worker dans le dossier de l’application', async () => {
+  for (const path of ['/1plan3D/', '/1plan3D/index.html', '/1plan3D/index.html?mode=demo#atelier']) {
+    const env = browserEnv({url:origin+path}); await env.ui.ready;
+    assert.deepEqual(env.registrations,[['/1plan3D/sw.js',{scope:'/1plan3D/',updateViaCache:'none'}]]);
+    assert.equal(env.ui.getState().offlineReady,true);
+    await env.close();
+  }
+});
+
 test('UI mise à jour : attente de la sauvegarde, activation confirmée, aucun rechargement ni modification de projet', async () => {
   let allowSave;
   const env = browserEnv({waiting:true,beforeUpdate:()=>new Promise(resolve=>{allowSave=resolve;})});
@@ -245,7 +288,12 @@ test('UI stockage durable : demande explicite, refus honnête, récupération du
 
 test('PWA : manifest et icônes installables, texte d’état échappé', () => {
   const json = JSON.parse(manifest);
-  assert.equal(json.start_url,'/index.html'); assert.equal(json.scope,'/'); assert.equal(json.display,'standalone');
+  assert.equal(json.start_url,'./index.html'); assert.equal(json.scope,'./'); assert.equal(json.id,'./'); assert.equal(json.display,'standalone');
+  for (const base of ['/', '/1plan3D/']) {
+    const manifestURL = `${origin}${base}manifest.webmanifest`;
+    assert.equal(new URL(json.start_url,manifestURL).pathname,`${base}index.html`);
+    for (const icon of json.icons) assert.ok(new URL(icon.src,manifestURL).pathname.startsWith(base));
+  }
   assert.deepEqual(json.icons.map(icon=>icon.sizes),['192x192','512x512']);
   for (const [data,size] of [[icon192,192],[icon512,512]]) {
     assert.equal(data.readUInt32BE(16),size); assert.equal(data.readUInt32BE(20),size);

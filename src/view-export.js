@@ -97,6 +97,7 @@ function pngBytes(url){if(!/^data:image\/png;base64,/.test(url))throw new Error(
 export async function buildViewArchive({project,model,viewport,selection,width=1600,document:doc=globalThis.document,onProgress=()=>{},cancelled=()=>false}){
  const jobs=exportJobs(selection);if(!jobs.length)throw new Error('Choisissez au moins une vue et son affichage, ou un plan.');
  if(jobs.some(job=>job.kind==='image')&&!viewport?.captureView)throw new Error('La 3D n’est pas disponible. Vous pouvez exporter les plans.');
+ if(jobs.some(job=>job.kind==='image')&&viewport?.waitForTextures)await viewport.waitForTextures();
  const files=[];
  for(const [index,job]of jobs.entries()){
   if(cancelled())throw new Error('Export annulé.');onProgress(index,jobs.length,job.label);

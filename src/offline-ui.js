@@ -132,7 +132,8 @@ export function setupOfflineUI(options = {}) {
     void readStorage();
     if (!state.supported) { starting = false; return getState(); }
     try {
-      registration = await navigator.serviceWorker.register('/sw.js', {scope: '/', updateViaCache: 'none'});
+      const base = new URL('./', location.href);
+      registration = await navigator.serviceWorker.register(new URL('sw.js', base).pathname, {scope: base.pathname, updateViaCache: 'none'});
       if (disposed) return getState();
       listen(registration, 'updatefound', () => watchWorker(registration.installing));
       watchWorker(registration.installing);
