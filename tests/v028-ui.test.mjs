@@ -29,6 +29,20 @@ test('V0.28 Escape dismisses menu before a modeling handler; second Escape reach
   const escape=()=>e.d.dispatchEvent(new e.w.KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));escape();assert.equal(cancelled,0);assert.equal(e.q('.display-menu').open,false);escape();assert.equal(cancelled,1);
  }finally{await e.close();}
 });
+test('project summary keeps its live figures and warning action across scene, plan and page changes',async()=>{
+ const e=fixture();try{
+  const summary=e.q('#summary-strip'),note=e.q('.bottom-note'),warnings=e.q('#warnings-button');let opened=0;
+  warnings.addEventListener('click',()=>opened++);summary.textContent='12 pièces';e.q('#warning-count').textContent='3';e.ui.refresh();
+  assert.equal(summary.parentElement,e.q('.project-summary-panel'));assert.equal(note.parentElement,summary.parentElement);assert.equal(e.q('#project-summary-warning-count').textContent,'3');assert.equal(e.q('#project-summary-warning-count').hidden,false);
+  e.click('.project-summary-menu > summary');assert.equal(e.q('.project-summary-menu').open,true);e.click('#warnings-button');assert.equal(opened,1);assert.equal(e.q('.project-summary-menu').open,false);
+  e.click('.project-summary-menu > summary');e.outside();assert.equal(e.q('.project-summary-menu').open,false);
+  for(const context of [{mode:'plan'},{page:'connections',mode:'scene'}]){
+   e.setContext(context);assert.equal(summary.parentElement,e.q('#workspace'));assert.equal(note.parentElement,e.q('#workspace'));assert.equal(summary.textContent,'12 pièces');
+   e.setContext({page:'design',mode:'scene'});assert.equal(e.q('#warnings-button'),warnings);assert.equal(summary.parentElement,e.q('.project-summary-panel'));
+  }
+  e.q('#warning-count').textContent='0';e.ui.refresh();assert.equal(e.q('#project-summary-warning-count').hidden,true);
+ }finally{await e.close();}
+});
 test('V0.28 drawers preserve exact draft nodes, pinning, collapse and focus without deselection',async()=>{
  const e=fixture();try{
   e.ui.show('properties');const input=e.q('[name=exact]');input.value='0.123456789123';e.click('[data-drawer-pin=properties]');e.outside();assert.equal(e.q('#inspector').inert,false);

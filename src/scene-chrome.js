@@ -1,8 +1,10 @@
 /** Floating scene controls. Hiding a drawer never rebuilds its forms or changes selection. */
-const MENUS = '.header-menu,.display-menu,.view-menu,.scene-add-menu,#scene-settings-host > .scene-settings-menu';
+const MENUS = '.header-menu,.display-menu,.view-menu,.scene-add-menu,.project-summary-menu,#scene-settings-host > .scene-settings-menu';
 export function setupSceneChrome({document:doc=globalThis.document,getContext=()=>({}),onResize=()=>{},onCloseContext=()=>{}}={}) {
  const body=doc.body, sidebar=doc.getElementById('sidebar'), scene=doc.getElementById('scene-area'), inspector=doc.getElementById('inspector');
  const marker=doc.createComment('Original pieces panel');sidebar.before(marker);
+ const summaryPanel=doc.querySelector('.project-summary-panel');
+ const summarySlots=summaryPanel?[doc.getElementById('summary-strip'),doc.querySelector('.bottom-note')].filter(Boolean).map(node=>{const marker=doc.createComment('Original project summary');node.before(marker);return {node,marker};}):[];
  let compact=false, context={}, open={pieces:false,properties:false}, pinned={pieces:false,properties:false};
  try{const saved=JSON.parse(doc.defaultView.localStorage.getItem('atelier.drawers.v1')||'{}');for(const key of Object.keys(pinned))pinned[key]=saved[key]===true;}catch{}
  const panel=name=>name==='pieces'?sidebar:inspector;
@@ -24,8 +26,10 @@ export function setupSceneChrome({document:doc=globalThis.document,getContext=()
  function savePins(){try{doc.defaultView.localStorage.setItem('atelier.drawers.v1',JSON.stringify(pinned));}catch{}}
  function refresh(){
   context=getContext();const next=context.page==='design'&&context.mode==='scene';
-  if(next!==compact){compact=next;closeMenus();if(compact)scene.append(sidebar);else marker.after(sidebar);queueMicrotask(onResize);}
+  if(next!==compact){compact=next;closeMenus();if(compact)scene.append(sidebar);else marker.after(sidebar);for(const {node,marker} of summarySlots){if(compact)summaryPanel.append(node);else marker.after(node);}queueMicrotask(onResize);}
   body.classList.toggle('compact-scene',compact);
+  const warningBadge=doc.getElementById('project-summary-warning-count'),warningCount=Number(doc.getElementById('warning-count')?.textContent)||0;
+  if(warningBadge){warningBadge.hidden=!warningCount;warningBadge.textContent=String(warningCount);warningBadge.setAttribute('aria-label',`${warningCount} point${warningCount>1?'s':''} à vérifier`);}
   if(compact){
    const toolbar=doc.getElementById('editor-toolbar');toolbar?.classList.toggle('hidden',!context.selectedCount);
    for(const el of toolbar?.querySelectorAll('[data-tool], [data-editor], #context-actions-open, [data-context-action]')||[])el.hidden=!context.editable;
@@ -69,13 +73,13 @@ export function setupSceneChrome({document:doc=globalThis.document,getContext=()
  }
  function toggled(event){if(event.target.matches?.(MENUS)&&event.target.open){closeMenus(event.target);onCloseContext();}}
  doc.addEventListener('pointerdown',outside,true);doc.addEventListener('click',click,true);doc.addEventListener('keydown',keydown,true);doc.addEventListener('toggle',toggled,true);
- return {refresh,show,closeMenus,getState:()=>({compact,open:{...open},pinned:{...pinned}}),destroy(){doc.removeEventListener('pointerdown',outside,true);doc.removeEventListener('click',click,true);doc.removeEventListener('keydown',keydown,true);doc.removeEventListener('toggle',toggled,true);marker.after(sidebar);marker.remove();body.classList.remove('compact-scene');sidebar.inert=inspector.inert=false;}};
+ return {refresh,show,closeMenus,getState:()=>({compact,open:{...open},pinned:{...pinned}}),destroy(){doc.removeEventListener('pointerdown',outside,true);doc.removeEventListener('click',click,true);doc.removeEventListener('keydown',keydown,true);doc.removeEventListener('toggle',toggled,true);closeMenus();marker.after(sidebar);marker.remove();for(const {node,marker} of summarySlots){marker.after(node);marker.remove();}body.classList.remove('compact-scene');sidebar.inert=inspector.inert=false;}};
 }
 
 export const sceneChromeStyles=`
 /* V0.28: fixed capsules, non-destructive drawers, and one transient menu. */
 .scene-capsule{display:none}.drawer-controls{display:none}.view-menu>summary{list-style:none;cursor:pointer}.view-menu>summary::-webkit-details-marker{display:none}.view-menu{position:relative}.view-menu-panel{position:absolute;top:calc(100% + 9px);left:0;right:auto;min-width:245px;padding:12px;background:#fffefa;border:1px solid #ccd7c4;border-radius:12px;box-shadow:0 12px 32px #243e2926;z-index:32}.view-menu-panel .segmented{display:flex}.view-menu-panel .navigation-mode{display:flex!important}.view-menu-panel .menu-label{display:block;margin:12px 0 7px}.view-menu-panel .view-utilities{display:flex;align-items:center;gap:6px;margin-top:10px}.view-menu-panel .view-orientation{display:block;margin-top:10px;font-size:11px}.view-menu>summary{display:flex;align-items:center;gap:8px;padding:9px 12px;background:#fffefa;border:1px solid #ccd7c4;border-radius:9px;font-size:12px;min-height:38px}
-body.compact-scene:not(.mobile-ui) .app-shell{grid-template-columns:76px minmax(0,1fr)}
+body.compact-scene:not(.mobile-ui) .app-shell{grid-template-columns:76px minmax(0,1fr);min-height:0}
 body.compact-scene:not(.mobile-ui) .scene-area{isolation:isolate}
 body.compact-scene .scene-capsule{display:flex;align-items:center;gap:3px;position:absolute;z-index:25;border:1px solid #cdd8c5;border-radius:13px;padding:4px;background:#fffefa;box-shadow:0 3px 12px #243e2914}
 body.compact-scene .scene-create{top:14px;left:14px}
@@ -113,5 +117,23 @@ body.mobile-ui.compact-scene #scene-area>.scene-interaction-bar{bottom:115px;max
 body.mobile-ui.compact-scene #scene-area>.zoom-tools{right:8px;bottom:10px}
 body.mobile-ui.compact-scene #scene-area>.scene-hint{right:62px;bottom:10px}
 body.compact-scene.scene-focus #scene-area{min-height:0;height:100%}
-@media print{.scene-capsule,.drawer-controls,.view-menu,.editor-toolbar{display:none!important}}
+/* One compact control row; the project figures only occupy space when opened. */
+.project-summary-menu{display:none;position:relative;z-index:30}
+body.compact-scene:not(.mobile-ui):not(.scene-focus) .workspace{display:grid;grid-template-columns:minmax(0,1fr) auto auto;grid-template-rows:auto minmax(0,1fr);grid-template-areas:'tabs summary history' 'scene scene scene';gap:8px;padding:8px}
+body.compact-scene:not(.mobile-ui):not(.scene-focus) .workspace-heading{display:contents}
+body.compact-scene:not(.mobile-ui):not(.scene-focus) .workspace-title-group{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+body.compact-scene:not(.mobile-ui):not(.scene-focus) .history-tools{grid-area:history;align-self:center}
+body.compact-scene:not(.mobile-ui):not(.scene-focus) #workspace-tabs{grid-area:tabs;margin:0;align-self:center}
+body.compact-scene:not(.mobile-ui):not(.scene-focus) .project-summary-menu{display:block;grid-area:summary;align-self:center}
+body.compact-scene:not(.mobile-ui):not(.scene-focus) #scene-area{grid-area:scene;min-height:0;margin:0}
+.project-summary-menu>summary{display:flex;align-items:center;gap:8px;min-height:34px;padding:6px 11px;list-style:none;cursor:pointer;border:1px solid #dce3d4;border-radius:7px;background:#fffefa;color:#34553b;font-size:12px;white-space:nowrap}
+.project-summary-menu>summary::-webkit-details-marker{display:none}
+.project-summary-menu>summary:hover,.project-summary-menu[open]>summary{background:#e9f0e3}
+#project-summary-warning-count{border-radius:4px;background:#f0e7d5;color:#855e26;padding:2px 5px;font-size:10px}
+.project-summary-panel{position:absolute;top:calc(100% + 8px);right:0;width:min(420px,calc(100vw - 180px));max-height:calc(100dvh - 130px);overflow:auto;padding:14px;border:1px solid #ccd7c4;border-radius:12px;background:#fffefa;box-shadow:0 12px 32px #243e2926}
+.project-summary-panel #summary-strip{grid-template-columns:1fr;margin:0 0 12px;gap:8px}
+.project-summary-panel .bottom-note{display:flex;flex-wrap:wrap;align-items:flex-start;gap:6px;padding:0;line-height:1.5}
+.project-summary-panel #bottom-note{flex:1;min-width:0}
+.project-summary-panel #warnings-button{flex-basis:100%;margin:4px 0 0;min-height:34px;text-align:left;border-radius:6px;background:#f4f1e8;padding:7px}
+@media print{.scene-capsule,.drawer-controls,.view-menu,.editor-toolbar,.project-summary-menu{display:none!important}}
 `;
