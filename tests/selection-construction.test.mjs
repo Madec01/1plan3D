@@ -57,4 +57,6 @@ test('group spacing moves every member rigidly, including panel corners, and fix
  assert.throws(()=>setGroupSpacing(p,['A'],{...options,distance:-1}),/écart/);
  const panel={id:'M',kind:'panel',material:'mesh',a:[3000,0,0],b:[4000,2000,0],corners:[[3000,0,0],[4000,0,0],[4000,2000,0],[3000,2000,0]],groupName:'G2',grouped:true};
  p.freeParts.push(panel);const withPanel=setGroupSpacing(p,['C'],options);assert.deepEqual(withPanel.freeParts.at(-1).corners,panel.corners.map(c=>[c[0]-1410,c[1],c[2]]));
+ panel.corners[2][1]=1750;panel.b=[...panel.corners[2]];
+ const withSlopingPanel=setGroupSpacing(p,['C'],options);assert.deepEqual(withSlopingPanel.freeParts.at(-1).corners,panel.corners.map(c=>[c[0]-1410,c[1],c[2]]));
 });
