@@ -20,6 +20,9 @@ import {normalizeDrawing,createDimension,measureDimension,getPlanDimensions,prev
 import {drawingPanel,createDimensionForm,editDimensionForm} from './plan-ui.js';
 import {resolveAdaptiveGrid,normalizeAssistance} from './adaptive-placement.js';
 import {betweenArrangement,betweenPreviewSVG,betweenMeasurements} from './between-placement.js';
+import {constructionOnSelection,postBesideSelection} from './selection-construction.js';
+import {groupSpacingChange,spacingTargets} from './group-spacing.js';
+import {groupSpacingForm,selectedPostForm} from './construction-ui.js';
 import {canUngroupSelection,groundSelection,alignToReference,distributeSelection,groupSelection,ungroupSelection,connectedSelection,selectionGroupIds,keyboardNudge,separateCopiedGroups} from './context-actions.js';
 import {CONTEXT_STYLES,contextMenuHTML,contextGroupForm,contextAlignForm,contextDistributeForm} from './context-ui.js';
 import {panelResizeFrame,surfaceResizePatch} from './panel-resize.js';
@@ -53,7 +56,7 @@ let project=normalizeProject(DEFAULT_PROJECT);let restored=false;try{const raw=l
 const projectLibrary=createProjectLibrary(localStorage);
 let model,bom,viewport=null,page='design',selectedId=null,undo=[],redo=[],shoppingFilter='',onlyMissing=false,wallSupport='concrete',lastSavedAt='',storageAvailable=true;
 let dossierTab='overview',offlineUI=null;
-let contextMenu=null,contextReturnFocus=null,linkPending=null,keyboardSession=null,sceneDistance=null,isolatedIds=null,soloSelectionId=null;
+let contextMenu=null,contextReturnFocus=null,linkPending=null,keyboardSession=null,sceneDistance=null,isolatedIds=null,soloSelectionId=null,selectionConstruction=null;
 let workspaceMode='scene',planEditor=null,mobileUI=null,multiSelect=false,touchMode='pan',dimensionEditing=null,dimensionPreview=null,sceneInteractionPending=false;
 let sceneChrome=null;
 let inspectorTab='piece',attachmentImpact=null,attachmentProposal=null;
@@ -146,7 +149,7 @@ $('warnings-button').onclick=()=>modal('Points à vérifier',`<p class="help-tex
 $('reset-view').onclick=()=>activateView('iso');$('zoom-in').onclick=()=>viewport?.zoom(1.2);$('zoom-out').onclick=()=>viewport?.zoom(1/1.2);
 try{viewport=new Viewport($('scene'),handleSceneSelection,(ids,payload)=>{const ok=commit(p=>withContactAttachment(transformSelection(p,ids,payload),payload.snap));if(ok)offerContactAttachment(payload.snap);renderInspector();return ok;})}catch(error){console.warn('Vue 3D indisponible',error);$('scene-area').insertAdjacentHTML('afterbegin','<div class="fallback">La 3D nécessite WebGL. Les réglages, quantités, sauvegardes et plans SVG restent disponibles.</div>')}
 {const style=document.createElement('style');style.textContent=FABRICATION_STYLES+workspaceStyles+sceneChromeStyles;document.head.append(style)}
-sceneChrome=setupSceneChrome({getContext:()=>({page,mode:workspaceMode,view:sceneView,editable:project.mode==='free',selectedCount:selectedIds.length+(selectedJoint?1:0),canResize:selectedIds.length===1&&panelResizeFrame(project.freeParts.find(p=>p.id===selectedIds[0])).available,canLink:selectedIds.length===2&&project.freeParts.filter(p=>selectedIds.includes(p.id)).every(p=>p.material==='wall'||p.material==='wood'&&p.kind!=='panel'),canUngroup:canUngroupSelection(project,selectedIds)}),onResize:()=>viewport?.resize(),onCloseContext:()=>closeContextMenu(false)});
+sceneChrome=setupSceneChrome({getContext:()=>({page,mode:workspaceMode,view:sceneView,editable:project.mode==='free',selectedCount:selectedIds.length+(selectedJoint?1:0),canResize:selectedIds.length===1&&panelResizeFrame(project.freeParts.find(p=>p.id===selectedIds[0])).available,canLink:selectedIds.length===2&&project.freeParts.filter(p=>selectedIds.includes(p.id)).every(p=>p.material==='wall'||p.material==='wood'&&p.kind!=='panel'),canUngroup:canUngroupSelection(project,selectedIds),canBetween:selectedIds.filter(id=>project.freeParts.some(p=>p.id===id&&p.material==='wood'&&p.kind!=='panel')).length>=2,canSpace:project.freeParts.length>1}),onResize:()=>viewport?.resize(),onCloseContext:()=>closeContextMenu(false)});
 setupSceneCommands();setupDrawing();rebuild();setNavigation(navigationMode);persist();if(restored)toast('Votre dernier projet a été retrouvé sur ce navigateur.');
 // Interface limitée aux tests de cohérence et à l’inspection de l’état local.
 if(viewport)viewport.onFixingTransform=(jointId,id,position)=>moveFixing(jointId,id,position);
@@ -231,7 +234,7 @@ document.addEventListener('submit',e=>{
  }
  if(type==='bulk'){commit(p=>{for(const part of p.freeParts.filter(x=>selectedIds.includes(x.id))){if(part.material==='wood'){if(n('width')>0)part.width=n('width');if(n('height')>0)part.height=n('height');if(data.get('species'))part.species=data.get('species')}if(data.get('groupName')){part.groupName=data.get('groupName');part.grouped=true;}}})}
  if(type==='transform'){if(selectedIds.some(id=>project.freeParts.find(x=>x.id===id)?.material==='wall')&&data.get('axis')!=='y'&&n('angle')!==0){toast('Les murs restent verticaux : utilisez une rotation autour de Y.');return}replaceProject(transformSelection(project,selectedIds,{delta:v('d'),axis:data.get('axis'),angle:n('angle')}))}
- if(type==='duplicate'){if(project.freeParts.length+selectedIds.length*Math.max(1,Math.min(30,Math.floor(n('count',1))))>1000){toast('Cette duplication dépasserait 1 000 pièces.');return}const count=Math.max(1,Math.min(30,Math.floor(n('count',1)))),axis={x:0,y:1,z:2}[data.get('axis')],before=new Set(project.freeParts.map(p=>p.id));let next=project;for(let i=1;i<=count;i++){const delta=[0,0,0];delta[axis]=n('spacing')*i;next=duplicateParts(next,selectedIds,delta)}replaceProject(separateCopiedGroups(project,next));selectParts(project.freeParts.filter(p=>!before.has(p.id)).map(p=>p.id))}
+ if(type==='duplicate'){if(project.freeParts.length+selectedIds.length*Math.max(1,Math.min(30,Math.floor(n('count',1))))>1000){toast('Cette duplication dépasserait 1 000 pièces.');return}const count=Math.max(1,Math.min(30,Math.floor(n('count',1)))),axis={x:0,y:1,z:2}[data.get('axis')],before=new Set(project.freeParts.map(p=>p.id));let next=project;for(let i=1;i<=count;i++){const delta=[0,0,0];delta[axis]=n('spacing')*i;next=separateCopiedGroups(next,duplicateParts(next,selectedIds,delta))}replaceProject(next);selectParts(project.freeParts.filter(p=>!before.has(p.id)).map(p=>p.id))}
  if(type==='snap'){replaceProject(snapToPoint(project,selectedIds[0],data.get('end'),data.get('target'),data.get('targetEnd')))}
  if(type==='joint'){const id=form.dataset.id,recipe=data.get('recipe'),j=model.joints.find(x=>x.id===id);const patch={...j,recipe,reference:data.get('reference'),notes:data.get('notes')};for(const key of ['connectors','screws','bolts','anchors','resinDose'])if(data.has(key))patch[key]=Math.max(0,n(key));commit(p=>setJoint(p,id,patch));toast('Quantités de la liaison mises à jour.')}
  if(type==='connect'){const a=data.get('aPart'),b=data.get('bPart');if(a===b){toast('Choisissez deux pièces différentes.');return}if(model.joints.some(j=>[j.aPart,j.bPart].includes(a)&&[j.aPart,j.bPart].includes(b))){toast('Ces deux pièces ont déjà une liaison. Sélectionnez-la pour modifier son montage.');return}const next=addJoint(project.mode==='free'?project:convertToFree(project),a,b,data.get('recipe'));replaceProject(next);$('modal').close();pickJoint(project.freeJoints.at(-1).id);toast('Liaison ajoutée au quantitatif.')}
@@ -392,18 +395,64 @@ function setupSceneCommands(){
 }
 function makeCandidate(type){
  const p=project.mode==='free'?project:convertToFree(project),part=makePart(p,['mesh','roof','woodpanel'].includes(type)?'panel':type);
- if(type==='roof'){Object.assign(part,{material:'roof',group:'roof',label:'Panneau de couverture',corners:[[-1000,2200,-500],[1000,2200,-500],[1000,2200,500],[-1000,2200,500]]});part.a=[...part.corners[0]];part.b=[...part.corners[2]]}
+ if(type==='roof'){Object.assign(part,{material:'roof',group:'roof',width:18,height:18,label:'Panneau de couverture',corners:[[-1000,2200,-500],[1000,2200,-500],[1000,2200,500],[-1000,2200,500]]});part.a=[...part.corners[0]];part.b=[...part.corners[2]]}
  if(type==='mesh')part.label='Panneau de grillage';if(type==='woodpanel')Object.assign(part,{material:'wood',width:18,label:'Panneau de bois',group:'structure'});
  return part;
 }
-function startAddingPiece(type){
+function startAddingPiece(type,freePlacement=false){
  if(project.freeParts.length>=1000){toast('Maximum 1 000 pièces dans un projet.');return}
- cancelSceneInteraction();const part=makeCandidate(type);placementPending={part,type,grid:resolveAdaptiveGrid(project)};
+ cancelSceneInteraction();const part=makeCandidate(type);
+ if(!freePlacement&&project.mode==='free'&&selectedIds.length){
+  selectionConstruction={ids:[...selectedIds],part,type};
+  if(type==='post'){modal('Ajouter un poteau aligné',selectedPostForm()+`<button class="btn full" type="button" data-free-add="post">Placer librement à la place</button>`);updateSelectedConstruction();return;}
+  try{finishSelectedConstruction(constructionOnSelection(project,selectionConstruction.ids,type,part));}
+  catch(error){modal('Ajuster la pose',`<p class="notice">${esc(error.message)}</p><button class="btn primary" type="button" data-free-add="${esc(type)}">Placer librement</button><button class="btn" type="button" data-context-cancel>Annuler</button>`);}
+  return;
+ }
+ placementPending={part,type,grid:resolveAdaptiveGrid(project)};
  if(workspaceMode==='plan'&&planEditor){planEditor.beginPlacement(part,{mode:['beam','brace'].includes(type)?'two-points':'point'});refreshMobile();return}
  if(viewport){viewport.beginPlacement(part,(placed,info)=>finishAddingPiece(placed,info));refreshMobile();return}
  const point=workplaneFrame(project.workplane).origin.toArray();
  modal('Placer la pièce',`<form data-place-piece><p class="help-text">Vue 3D indisponible : saisissez le point de pose sur le plan de travail. Les propriétés resteront modifiables.</p><div class="field-grid three">${['X','Y','Z'].map((axis,i)=>`<label class="field"><span>${axis} · mm</span><input name="p${i}" type="number" min="-100000" max="100000" step="any" value="${point[i]}" required></label>`).join('')}</div><button class="btn primary" type="submit">Placer la pièce</button><button class="btn" type="button" data-cancel-placement>Annuler</button></form>`);
 }
+function selectedPostProposal(form){
+ if(!selectionConstruction)throw Error('Sélectionnez à nouveau les supports.');
+ const values=Object.fromEntries(new FormData(form)),distance=parseDimensionInput(values.distance);
+ if(distance===null)throw Error('Saisissez un écart en mm, cm ou m.');
+ return postBesideSelection(project,selectionConstruction.ids,selectionConstruction.part,{...values,distance,side:Number(values.side)});
+}
+function updateSelectedConstruction(){
+ const form=document.querySelector('[data-selected-post]');if(!form)return;
+ try{const result=selectedPostProposal(form);form.querySelector('[data-construction-preview]').textContent=result.message;form.querySelector('[type=submit]').disabled=false;viewport?.previewArrangement?.(result.parts,[]);}
+ catch(error){form.querySelector('[data-construction-preview]').textContent=error.message;form.querySelector('[type=submit]').disabled=true;viewport?.clearArrangementPreview?.();}
+}
+function finishSelectedConstruction(result){
+ if(!selectionConstruction)return;
+ const {ids:references,type}=selectionConstruction,added=[],supports=project.freeParts.filter(p=>references.includes(p.id));
+ const group=type!=='post'&&supports.length&&supports.every(p=>p.grouped!==false&&p.groupName&&p.groupName===supports[0].groupName)?supports[0].groupName:null;
+ const ok=commit(p=>{for(const proposed of result.parts){const id=makePart(p,proposed.kind).id;p.freeParts.push({...proposed,id,...(group?{groupName:group,grouped:true,selectLinked:true}:{})});added.push(id);if(result.sourceId&&p.appearance.parts[result.sourceId])p.appearance.parts[id]=structuredClone(p.appearance.parts[result.sourceId]);}});
+ if(ok){selectionConstruction=null;viewport?.clearArrangementPreview?.();if($('modal').open)$('modal').close();selectParts(group?selectionGroupIds(project,added):added);toast(result.message);}
+}
+function readGroupSpacing(form){
+ const values=Object.fromEntries(new FormData(form)),distance=parseDimensionInput(values.distance);
+ if(distance===null)throw Error('Saisissez un écart en mm, cm ou m.');
+ return groupSpacingChange(project,selectedIds,{...values,side:Number(values.side),distance});
+}
+function updateGroupSpacing(){
+ const form=document.querySelector('[data-group-spacing]');if(!form)return;
+ const targets=spacingTargets(project,selectedIds),moving=targets.find(t=>t.key===form.elements.moving.value);
+ for(const option of form.elements.reference.options)option.disabled=targets.find(t=>t.key===option.value)?.ids.some(id=>moving?.ids.includes(id));
+ if(form.elements.reference.selectedOptions[0]?.disabled){const valid=[...form.elements.reference.options].find(o=>!o.disabled);if(valid)form.elements.reference.value=valid.value;}
+ try{const result=readGroupSpacing(form);form.querySelector('[data-construction-preview]').textContent=`${fmt(result.current,3)} → ${fmt(result.distance,3)} mm · ${result.ids.length} pièce(s) déplacée(s) ensemble`;form.querySelector('[type=submit]').disabled=false;viewport?.previewPlacement(result.ids,result.delta,result.referenceIds[0]);}
+ catch(error){form.querySelector('[data-construction-preview]').textContent=error.message;form.querySelector('[type=submit]').disabled=true;viewport?.previewPlacement([],null);}
+}
+for(const event of ['input','change'])document.addEventListener(event,e=>{if(e.target.closest('[data-selected-post]'))updateSelectedConstruction();if(e.target.closest('[data-group-spacing]'))updateGroupSpacing();});
+document.addEventListener('submit',e=>{
+ const form=e.target;if(!form.matches('[data-selected-post],[data-group-spacing]'))return;e.preventDefault();if(!form.checkValidity())return;
+ try{if(form.matches('[data-selected-post]'))finishSelectedConstruction(selectedPostProposal(form));else{const result=readGroupSpacing(form);if(commit(p=>transformSelection(p,result.ids,{delta:result.delta}))){$('modal').close();selectParts(result.ids);toast('Écart appliqué · ensembles conservés.');}}}catch(error){toast(error.message);}
+});
+document.addEventListener('click',e=>{const button=e.target.closest('[data-free-add]');if(!button)return;const type=button.dataset.freeAdd;selectionConstruction=null;if($('modal').open){$('modal').addEventListener('close',()=>startAddingPiece(type,true),{once:true});$('modal').close();}else startAddingPiece(type,true);});
+$('modal').addEventListener('close',()=>{selectionConstruction=null;viewport?.clearArrangementPreview?.();viewport?.previewPlacement([],null);});
 function finishAddingPiece(part,info={}){
  if(!placementPending)return;const type=placementPending.type;placementPending=null;viewport?.cancelPlacement?.();planEditor?.clearPreview();interactionStatus('');
  let id=part.id;const ok=commit(p=>{const next=convertToFree(p);if(next.freeParts.length>=1000)throw Error('Maximum 1 000 pièces.');if(next.freeParts.some(p=>p.id===id)){id=makePart(next,part.kind).id}next.freeParts.push({...part,id});return withContactAttachment(next,info.snap?{...info.snap,sourceId:id}:null)});
@@ -440,11 +489,12 @@ document.addEventListener('submit',e=>{if(e.target.matches('[data-joint-sheet]')
 function betweenWoods(){return project.freeParts.filter(p=>p.material==='wood'&&p.kind!=='panel')}
 function openBetweenAssistant(centerExisting=false){
  const woods=betweenWoods();if(woods.length<2){toast('Ajoutez deux pièces de bois pour définir les repères.');return}
- cancelSceneInteraction();const picked=selectedIds.map(id=>woods.find(p=>p.id===id)).filter(Boolean),posts=woods.filter(p=>p.kind==='post'),base=picked.length>=2?picked:posts.length>=2?posts:woods;
+ cancelSceneInteraction();const picked=selectedIds.map(id=>woods.find(p=>p.id===id)).filter(Boolean),pickedPosts=picked.filter(p=>p.kind==='post'),posts=woods.filter(p=>p.kind==='post'),base=pickedPosts.length>=2?pickedPosts:picked.length>=2?picked:posts.length>=2?posts:woods;
  const a=base[0],b=base[1],moving=centerExisting?picked[2]||woods.find(p=>p.id!==a.id&&p.id!==b.id):a;
  const opts=selected=>woods.map(p=>`<option value="${esc(p.id)}" ${p.id===selected?'selected':''}>${esc(p.label)} · ${esc(p.id)}</option>`).join('');
  modal(centerExisting?'Centrer une pièce entre deux repères':'Insérer entre deux repères',`<form data-between-form><p class="help-text">Les deux repères restent fixes. L’aperçu montre la répartition avant de l’appliquer.</p><div class="field-grid"><label class="field"><span>Premier repère</span><select name="referenceA">${opts(a.id)}</select></label><label class="field"><span>Deuxième repère</span><select name="referenceB">${opts(b.id)}</select></label></div><label class="field"><span>Action</span><select name="mode"><option value="insert" ${!centerExisting?'selected':''}>Ajouter des pièces intermédiaires</option><option value="existing" ${centerExisting?'selected':''}>Repositionner une pièce existante</option></select></label><label class="field"><span data-between-source-label>Pièce à copier</span><select name="source">${opts(moving?.id||a.id)}</select></label><div class="field-grid"><label class="field"><span>Nombre de pièces à ajouter</span><input name="count" type="number" min="1" max="50" step="1" value="1" required></label><label class="field"><span>Répartition</span><select name="spacing"><option value="axes">Entraxes égaux</option><option value="faces">Espaces libres égaux</option></select></label></div><p class="help-text">Une pièce + entraxes égaux = exactement au milieu. Les mesures suivent le plan de travail. L’orientation, la section et la longueur de la pièce choisie sont conservées.</p><div data-between-preview class="between-preview" aria-live="polite"></div><p class="help-text">Ce placement exact prend la priorité sur la grille. Les pièces déjà présentes restent en place.</p><div class="placement-actions"><button class="btn" type="button" data-between-cancel>Annuler</button><button class="btn primary" type="submit" data-between-apply>Appliquer la pose</button></div></form>`);
  updateBetweenPreview(document.querySelector('[data-between-form]'));
+ const shortcuts=document.createElement('div');shortcuts.className='placement-actions';shortcuts.innerHTML='<button class="btn" type="button" data-between-preset="1">Un poteau au milieu</button><button class="btn" type="button" data-between-preset="2">Plusieurs poteaux équidistants</button>';document.querySelector('[data-between-form] [data-between-preview]').before(shortcuts);
 }
 function readBetweenForm(form){
  if(!form.checkValidity())throw Error('Vérifiez les champs : 1 à 50 pièces entières.');
@@ -468,12 +518,14 @@ function applyBetween(form){
    else for(const [index,part]of result.parts.entries()){
     const id=makePart(p,part.kind).id;p.freeParts.push({...part,id,label:template.label+' · intermédiaire '+(index+1)});ids.push(id);
     if(p.manufacturing.cuts[template.id])p.manufacturing.cuts[id]=structuredClone(p.manufacturing.cuts[template.id]);
+    if(p.appearance.parts[template.id])p.appearance.parts[id]=structuredClone(p.appearance.parts[template.id]);
    }
   });
   if(ok){$('modal').close();viewport?.clearArrangementPreview?.();selectParts(ids);render();renderInspector();toast(existing?'Pièce centrée entre les deux repères.':ids.length+' pièce(s) placée(s) à intervalles réguliers.');}
  }catch(error){toast(error.message);updateBetweenPreview(form)}
 }
 document.addEventListener('click',e=>{
+ const preset=e.target.closest('[data-between-preset]');if(preset){const form=preset.closest('[data-between-form]');form.elements.mode.value='insert';form.elements.count.value=preset.dataset.betweenPreset;form.elements.spacing.value='axes';updateBetweenPreview(form);return;}
  const button=e.target.closest('[data-assist-action]');if(button){
   if(button.dataset.assistAction==='between')openBetweenAssistant();
   if(button.dataset.assistAction==='center-existing')openBetweenAssistant(true);
@@ -536,7 +588,7 @@ function setupDrawing(){
  $('touch-rotate').onclick=()=>{touchMode=touchMode==='pan'?'rotate':'pan';viewport?.setTouchMode?.(touchMode);$('touch-rotate').classList.toggle('active',touchMode==='rotate');$('touch-rotate').setAttribute('aria-pressed',String(touchMode==='rotate'));document.querySelector('[data-chrome-touch]')?.setAttribute('aria-pressed',String(touchMode==='rotate'));toast(touchMode==='rotate'?'Un doigt pivote la vue. Deux doigts déplacent et zooment.':'Un doigt déplace la vue. Pincez pour zoomer.');};
 }
 function openAddPalette(){
- cancelSceneInteraction();modal('Ajouter une pièce',`<p class="help-text">${workspaceMode==='plan'?'Dans le plan : un point pour poser un poteau, deux points pour tracer un chevron ou une diagonale.':'Touchez le plan pour préparer la pose. Sur téléphone, validez l’aperçu pour ajouter la pièce.'}</p><div class="add-grid">${[['post','Poteau'],['beam','Chevron / traverse'],['brace','Diagonale'],['mesh','Grillage'],['woodpanel','Panneau bois'],['roof','Toiture'],['wall','Mur existant']].map(([type,label])=>`<button class="btn" type="button" data-plan-add="${type}">${label}</button>`).join('')}</div>`);
+ cancelSceneInteraction();modal('Ajouter une pièce',`<p class="help-text">${selectedIds.length&&project.mode==='free'?'La pièce sera ajustée à la sélection. Pour un poteau, choisissez ensuite son écart. Désélectionnez les supports pour une pose libre.':workspaceMode==='plan'?'Dans le plan : un point pour poser un poteau, deux points pour tracer un chevron ou une diagonale.':'Touchez le plan pour préparer la pose. Sur téléphone, validez l’aperçu pour ajouter la pièce.'}</p><div class="add-grid">${[['post','Poteau'],['beam','Chevron / traverse'],['brace','Diagonale'],['mesh','Grillage'],['woodpanel','Panneau bois'],['roof','Toiture'],['wall','Mur existant']].map(([type,label])=>`<button class="btn" type="button" data-plan-add="${type}">${label}</button>`).join('')}</div><button class="btn full" type="button" data-assist-action="between">Poteaux intermédiaires…</button>`);
 }
 function newDimension(){cancelSceneInteraction();modal('Enregistrer une cote',createDimensionForm(project,model,selectedIds));syncDimensionCreate();}
 function syncDimensionCreate(){const form=document.querySelector('[data-dimension-create]');if(!form)return;const type=form.elements.type.value;form.querySelector('[data-dimension-second]').hidden=type==='length';form.querySelector('[data-dimension-axis]').hidden=['length','angle'].includes(type);}
@@ -749,6 +801,8 @@ function runContextAction(action,button){
  closeContextMenu(false);keyboardSession=null;
  if(action==='select-all'){selectParts(project.freeParts.map(p=>p.id));return;}
  if(action==='add'){openAddPalette();return;}
+ if(action==='between'){openBetweenAssistant();return;}
+ if(action==='spacing'){cancelSceneInteraction();modal('Régler l’écart des pièces ou des groupes',groupSpacingForm(project,selectedIds));updateGroupSpacing();return;}
  if(action==='show-all'){isolatedIds=null;viewport?.setIsolation?.(null);toast('Toutes les pièces sont de nouveau visibles.');return;}
  if(action==='properties'){sceneChrome?.show('properties');if(mobileUI?.getState?.().mobile)mobileUI.open('properties');$('inspector')?.querySelector('input,select,button')?.focus();return;}
  if(action==='focus'){viewport?.focusSelection?.(selectedIds);if(workspaceMode==='plan')planEditor?.fit();return;}

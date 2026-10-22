@@ -24,7 +24,7 @@ test('V0.13 : répartition exacte, assistance persistante et pose sur grille ind
   const near=(a,b,message='')=>assert.ok(Math.abs(a-b)<1e-8,`${message} : ${a} / ${b}`);
   const sameReferences=(before,ids)=>{for(const id of ids)assert.deepEqual(piece(id),before.freeParts.find(p=>p.id===id),`${id} reste fixe`)};
   const addPost=(x,section=100)=>{
-    click('[data-add="post"]');submit('[data-place-piece]',{p0:0,p1:0,p2:0});const id=app.getSelection()[0];assert.ok(id);
+    app.selectParts([]);click('[data-add="post"]');submit('[data-place-piece]',{p0:0,p1:0,p2:0});const id=app.getSelection()[0];assert.ok(id);
     submit('[data-editor-form="piece"]',{a0:x,a1:0,a2:0,b0:x,b1:2000,b2:0,length:2000,lengthAnchor:'a',width:section,height:section,foundation:'none'});
     assert.deepEqual(piece(id).a,[x,0,0]);assert.deepEqual(piece(id).b,[x,2000,0]);return id;
   };
@@ -91,10 +91,10 @@ test('V0.13 : répartition exacte, assistance persistante et pose sur grille ind
       click('[data-assist-action="grid-selection"]');const assistance=app.getProject().assistance;
       assert.equal(assistance.gridSnap,true);assert.equal(assistance.gridMode,'adaptive');assert.equal(assistance.gridReference,'pair');assert.equal(assistance.gridA,a);assert.equal(assistance.gridB,b);assert.match(q('.adaptive-grid-readout').textContent,/1\s*850/);assert.deepEqual(app.getProject().freeParts,references);
       click('[data-step="50"]');assert.deepEqual(app.getProject().assistance,assistance);
-      const before=app.getProject();click('[data-add="post"]');submit('[data-place-piece]',{p0:1900.123,p1:0,p2:123.4});const added=piece(app.getSelection()[0]);assert.deepEqual(added.a,[1850,0,0]);assert.equal(app.getProject().grid,50);click('#undo');assert.deepEqual(app.getProject(),before);
-      change('[data-field="snap"]',false);const noRelativeSnap=app.getProject();click('[data-add="post"]');submit('[data-place-piece]',{p0:1900.123,p1:0,p2:123.4});assert.deepEqual(piece(app.getSelection()[0]).a,[1850,0,0]);click('#undo');assert.deepEqual(app.getProject(),noRelativeSnap);
-      settings('gridSnap',false);change('[data-field="snap"]',true);const relativeOnly=app.getProject();click('[data-add="post"]');submit('[data-place-piece]',{p0:1900.123,p1:0,p2:123.4});assert.deepEqual(piece(app.getSelection()[0]).a,[1900,0,100]);click('#undo');assert.deepEqual(app.getProject(),relativeOnly);
-      change('[data-field="snap"]',false);click('[data-add="post"]');submit('[data-place-piece]',{p0:1900.123,p1:0,p2:123.4});assert.deepEqual(piece(app.getSelection()[0]).a,[1900.123,0,123.4]);
+      const before=app.getProject();app.selectParts([]);click('[data-add="post"]');submit('[data-place-piece]',{p0:1900.123,p1:0,p2:123.4});const added=piece(app.getSelection()[0]);assert.deepEqual(added.a,[1850,0,0]);assert.equal(app.getProject().grid,50);click('#undo');assert.deepEqual(app.getProject(),before);
+      change('[data-field="snap"]',false);const noRelativeSnap=app.getProject();app.selectParts([]);click('[data-add="post"]');submit('[data-place-piece]',{p0:1900.123,p1:0,p2:123.4});assert.deepEqual(piece(app.getSelection()[0]).a,[1850,0,0]);click('#undo');assert.deepEqual(app.getProject(),noRelativeSnap);
+      settings('gridSnap',false);change('[data-field="snap"]',true);const relativeOnly=app.getProject();app.selectParts([]);click('[data-add="post"]');submit('[data-place-piece]',{p0:1900.123,p1:0,p2:123.4});assert.deepEqual(piece(app.getSelection()[0]).a,[1900,0,100]);click('#undo');assert.deepEqual(app.getProject(),relativeOnly);
+      change('[data-field="snap"]',false);app.selectParts([]);click('[data-add="post"]');submit('[data-place-piece]',{p0:1900.123,p1:0,p2:123.4});assert.deepEqual(piece(app.getSelection()[0]).a,[1900.123,0,123.4]);
     });
   }finally{URL.createObjectURL=createURL;URL.revokeObjectURL=revokeURL;await window.happyDOM.close();}
 });

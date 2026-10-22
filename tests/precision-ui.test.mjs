@@ -11,6 +11,7 @@ test('V0.4.1 : navigation, précision, écart, plan de travail et contact propos
  window.HTMLCanvasElement.prototype.getContext=()=>null;
  const warn=console.warn,error=console.error;console.warn=console.error=()=>{};try{await import('../src/app.js')}finally{console.warn=warn;console.error=error}
  const app=window.Atelier,q=s=>document.querySelector(s),click=s=>{
+  if(q(s)?.matches('[data-add]'))app.selectParts([]); // These fixtures exercise free placement.
   const button=q(s);assert.ok(button,s);button.click();
   if(button.matches('[data-add]')){const placement=q('form[data-place-piece]');assert.ok(placement,'placement XYZ');for(const name of ['p0','p1','p2'])placement.elements.namedItem(name).value=String(Number(placement.elements.namedItem(name).value));placement.dispatchEvent(new window.Event('submit',{bubbles:true,cancelable:true}));assert.equal(placement.closest('dialog')?.open??false,false)}
  },change=(s,value)=>{const el=q(s);assert.ok(el,s);if(el.type==='checkbox')el.checked=value;else el.value=String(value);el.dispatchEvent(new window.Event('change',{bubbles:true}))},submit=s=>q(s).dispatchEvent(new window.Event('submit',{bubbles:true,cancelable:true}));

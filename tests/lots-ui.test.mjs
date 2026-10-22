@@ -10,6 +10,7 @@ test('V0.9 : fixations, matériaux, modèles, électricité et projets ensemble'
  document.write((await fs.readFile(new URL('../src/shell.html',import.meta.url),'utf8')).replace('/*__SCRIPT__*/',''));
  window.HTMLCanvasElement.prototype.getContext=()=>null;const warn=console.warn,error=console.error;console.warn=console.error=()=>{};try{await import('../src/app.js')}finally{console.warn=warn;console.error=error}
  const app=window.Atelier,q=s=>document.querySelector(s),click=s=>{
+  if(q(s)?.matches('[data-add]'))app.selectParts([]); // These fixtures exercise free placement.
   const button=q(s);assert.ok(button,s);button.click();
   if(button.matches('[data-add]')){const placement=q('form[data-place-piece]');assert.ok(placement,'placement XYZ');for(const name of ['p0','p1','p2'])placement.elements.namedItem(name).value=String(Number(placement.elements.namedItem(name).value));placement.dispatchEvent(new window.Event('submit',{bubbles:true,cancelable:true}));assert.equal(placement.closest('dialog')?.open??false,false)}
  },form=(s,values)=>{const f=q(s);assert.ok(f,s);for(const [k,v]of Object.entries(values)){const el=f.elements.namedItem(k);assert.ok(el,k);if(el.type==='checkbox')el.checked=v;else el.value=String(v)}assert.equal(f.checkValidity(),true,'valid '+s+' '+[...f.elements].filter(e=>e.checkValidity&&!e.checkValidity()).map(e=>e.name+':'+e.value+':'+e.validationMessage).join(';'));f.dispatchEvent(new window.Event('submit',{bubbles:true,cancelable:true}))};

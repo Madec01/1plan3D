@@ -13,19 +13,21 @@ export function contextMenuHTML(project,ids,{isolated=false,parts=project.freePa
  if(!count)primary=(editable?add('add','Ajouter une pièce')+add('select-all','Tout sélectionner'):'')+add('focus','Cadrer le projet')+(isolated?add('show-all','Tout réafficher'):'');
  else{
   primary+=add('properties','Propriétés');
+  const wholeGroup=groups.some(g=>g.ids.length===count&&g.ids.every(id=>ids.includes(id)));
+  if(editable)primary+=add('duplicate',wholeGroup?'Dupliquer le groupe':'Dupliquer');
+  if(editable&&project.freeParts.length>1)primary+=add('spacing','Régler l’écart…');
   if(editable&&linkable&&count<=2)primary+=add(count===2?'link':'link-target',count===2?'Relier ces deux pièces':'Relier à une autre pièce');
-  if(editable&&count<=2)primary+=add('attach','Attacher à un support…');
-  if(editable)primary+=add('ground',count===1?'Poser au sol':'Poser l’ensemble au sol');
+  const between=list.filter(p=>p.material==='wood'&&p.kind!=='panel').length>=2;
+  if(editable&&between)primary+=add('between','Poteaux intermédiaires…');
+  else if(editable)primary+=add('ground',count===1?'Poser au sol':'Poser l’ensemble au sol');
   if(editable&&panel)primary+=add('resize','Redimensionner…');
-  else if(editable&&count>1)primary+=add('align','Aligner…');
-  else if(editable)primary+=add('duplicate','Dupliquer');
   if(editable&&ungroupable)primary+=add('ungroup','Dégrouper');
   else if(editable&&count>1)primary+=add('group','Grouper…');
   primary+=add('measure','Mesurer');
   if(editable)primary+=add('delete','Supprimer',{className:'context-danger'});
  }
  const label=text=>`<p class="context-label">${esc(text)}</p>`;
- const position=later('ground','Poser l’ensemble au sol',{disabled:!editable||!count})+later('align','Aligner sur une référence…',{disabled:!editable||count<2})+later('distribute','Répartir les pièces…',{disabled:!editable||count<3})+(count>1?later('ground-individual','Poser chaque pièce au sol',{disabled:!editable}):'')+(panel?later('resize','Redimensionner…',{disabled:!editable}):'');
+ const position=later('spacing','Régler l’écart des pièces / groupes…',{disabled:!editable||!count})+later('between','Insérer entre deux repères…',{disabled:!editable})+later('ground','Poser l’ensemble au sol',{disabled:!editable||!count})+later('align','Aligner sur une référence…',{disabled:!editable||count<2})+later('distribute','Répartir les pièces…',{disabled:!editable||count<3})+(count>1?later('ground-individual','Poser chaque pièce au sol',{disabled:!editable}):'')+(panel?later('resize','Redimensionner…',{disabled:!editable}):'');
  const grouping=later('group','Nommer / créer un groupe…',{disabled:!editable||!count})+later('select-connected','Sélectionner les pièces reliées',{disabled:!editable||!count})+groups.filter(g=>names.has(g.name)).map(g=>button('select-group',`Sélectionner « ${g.name} » (${g.count})`,{group:g.name})).join('')+later('ungroup','Dégrouper',{disabled:!editable||!ungroupable});
  const relations=editable&&count?later('attach','Attacher à un support…',{disabled:count>2})+later('adapt','Adapter aux supports…',{disabled:count!==1})+later('detach','Détacher…'):'';
  const view=later('focus',count?'Cadrer la sélection':'Cadrer le projet')+later('measure','Mesurer',{disabled:!count})+later('isolate','Isoler la sélection',{disabled:!count})+later('show-all','Tout réafficher',{disabled:!isolated});

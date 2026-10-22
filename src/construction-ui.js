@@ -1,0 +1,13 @@
+import {spacingTargets,spacingDefaults,groupSpacingChange} from './group-spacing.js';
+
+const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const select=(name,label,choices,value)=>`<label>${label}<select name="${name}">${choices.map(([id,title])=>`<option value="${esc(id)}"${String(id)===String(value)?' selected':''}>${esc(title)}</option>`).join('')}</select></label>`;
+const distance=value=>`<label>Écart souhaité<input name="distance" type="text" inputmode="decimal" value="${esc(value)} mm" required aria-label="Écart souhaité"></label><p class="context-form-note">Exemples : 0,5 m · 25 cm · 120,5 mm</p>`;
+const actions=label=>`<output data-construction-preview class="measure-readout" aria-live="polite"></output><div class="context-form-actions"><button class="btn" type="button" data-context-cancel>Annuler</button><button class="btn primary" type="submit">${label}</button></div>`;
+export function groupSpacingForm(project,ids){
+ const initial=spacingDefaults(project,ids),targets=spacingTargets(project,ids).map(t=>[t.key,t.label]),current=groupSpacingChange(project,ids,initial).current;
+ return `<form class="context-form" data-group-spacing><p class="context-form-note">Chaque groupe se déplace en bloc : ses dimensions, ses pièces et leurs positions relatives sont conservées. La référence reste fixe.</p>${select('moving','Ensemble à déplacer',targets,initial.moving)}${select('reference','Référence fixe',targets,initial.reference)}<div class="context-form-grid">${select('axis','Direction',[['x','X · largeur'],['y','Y · hauteur'],['z','Z · profondeur']],initial.axis)}${select('side','Côté',[['1','Côté positif (+)'],['-1','Côté négatif (−)']],initial.side)}</div>${select('measure','Mesure',[['faces','Espace libre entre les ensembles'],['axes','Distance entre les centres des ensembles']],'faces')}${distance(Math.max(0,current))}${actions('Appliquer l’écart')}</form>`;
+}
+export function selectedPostForm(){
+ return `<form class="context-form" data-selected-post><p class="context-form-note">Le poteau reprend les dimensions et l’orientation du poteau de bout. Choisissez son écart par rapport à la sélection.</p>${distance(500)}${select('measure','Mesure',[['faces','Espace libre après la sélection'],['axes','Entraxe avec le poteau de bout']],'faces')}<div class="context-form-grid">${select('direction','Alignement',[['row','Prolonger l’alignement sélectionné'],['x','X · largeur'],['z','Z · profondeur']],'row')}${select('side','Côté',[['1','Après (+)'],['-1','Avant (−)']],'1')}</div>${actions('Ajouter le poteau')}</form>`;
+}

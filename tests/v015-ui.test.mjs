@@ -58,6 +58,7 @@ test('V0.15 : plan sans WebGL, cotes attachées, aperçu exact et sauvegarde', a
     for (const type of ['pointerdown', 'pointerup']) editor.svg.dispatchEvent(new window.PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 1, pointerType: 'mouse', button: 0, clientX, clientY }));
   };
   const addFromPalette = async type => {
+    app.selectParts([]); // Explicit free placement; selection-based construction has separate coverage.
     click('[data-plan-action="add"]');
     click(`[data-plan-add="${type}"]`);
     await new Promise(resolve => setTimeout(resolve, 0));

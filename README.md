@@ -35,6 +35,13 @@ En cas de page 404, vérifier la source Pages et le résultat du workflow ci-des
 - Validation : 576 tests automatisés réussis ; parcours WebGL, export PNG, rechargement PWA hors connexion et interface 390 × 844 contrôlés dans Chromium logiciel. Essai sur téléphone physique restant à faire.
 - [Sources, licences, échelles et entretien du pack](docs/TEXTURES.md). Les images sources sont vérifiées par SHA-256 et livrées localement ; aucune clé ou connexion externe n’est nécessaire à l’usage.
 
+## Construction depuis la sélection
+
+- **Écart** dans les actions de sélection permet de choisir une pièce, un groupe entier ou toute la sélection à déplacer, puis une référence fixe. Les distances acceptent mm, cm et m ; les positions internes des groupes sont conservées.
+- **Dupliquer** est accessible directement dans la barre de sélection et les actions rapides. Chaque copie de groupe reste indépendante, y compris lors d’une duplication multiple.
+- **Ajouter** utilise les supports sélectionnés : chevron au-dessus des poteaux, grillage ou panneau ajusté à leur surface, et poteau aligné reprenant section, hauteur et orientation avec saisie de l’écart. Les pièces posées sur un groupe unique le rejoignent ; un poteau ajouté à côté reste indépendant. Sans sélection, la pose reste libre.
+- **Poteaux intermédiaires** se trouve dans Ajouter et dans les actions de sélection : un poteau au milieu, plusieurs à entraxes égaux ou à espaces libres égaux. L’aperçu conserve les deux références et chaque ajout s’annule en une seule fois.
+
 ## Nouveautés V0.29
 
 - Ajout direct depuis la capsule réparé ; la palette de dialogue conserve son parcours de pose avec aperçu.

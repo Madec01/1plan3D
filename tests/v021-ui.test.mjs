@@ -44,8 +44,8 @@ test('V0.21 context menu exposes common actions and one overflow, retaining rare
  const p=project(),w=mount(contextMenuHTML(p,['A','B']));
  try{
   const d=w.document;assert.equal(d.querySelectorAll('details').length,1);assert.equal(d.querySelector('summary').textContent,'Plus d’actions');assert.ok(d.querySelectorAll('.context-primary button').length<=8);
-  for(const action of ['properties','link','attach','ground','align','group','measure','delete'])assert.ok(d.querySelector(`.context-primary [data-context-action="${action}"]`),action);
-  for(const action of ['duplicate','select-connected','distribute','adapt','detach','isolate','show-all','workplane-reset'])assert.ok(d.querySelector(`details [data-context-action="${action}"]`),action);
+  for(const action of ['properties','duplicate','spacing','between','link','group','measure','delete'])assert.ok(d.querySelector(`.context-primary [data-context-action="${action}"]`),action);
+  for(const action of ['attach','ground','align','select-connected','distribute','adapt','detach','isolate','show-all','workplane-reset'])assert.ok(d.querySelector(`details [data-context-action="${action}"]`),action);
   assert.equal(d.querySelectorAll('[data-context-action="measure"]').length,1);assert.equal(d.querySelectorAll('[data-context-action="duplicate"]').length,1);
  }finally{await w.happyDOM.close()}
 });

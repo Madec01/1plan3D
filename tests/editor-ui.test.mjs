@@ -9,6 +9,7 @@ test('V0.4 : parcours construction libre, assemblages et murs',async t=>{
  document.write((await fs.readFile(new URL('../src/shell.html',import.meta.url),'utf8')).replace('/*__SCRIPT__*/',''));window.HTMLCanvasElement.prototype.getContext=()=>null;
  const warn=console.warn,error=console.error;console.warn=console.error=()=>{};try{await import('../src/app.js')}finally{console.warn=warn;console.error=error}
  const q=s=>{const el=document.querySelector(s);assert.ok(el,s);return el},app=window.Atelier,click=s=>{
+  if(q(s)?.matches('[data-add]'))app.selectParts([]); // These fixtures exercise free placement.
   const button=q(s);button.click();
   if(button.matches('[data-add]')){const placement=q('form[data-place-piece]');for(const name of ['p0','p1','p2'])placement.elements.namedItem(name).value=String(Number(placement.elements.namedItem(name).value));placement.dispatchEvent(new window.Event('submit',{bubbles:true,cancelable:true}));assert.equal(document.querySelector('form[data-place-piece]')?.closest('dialog')?.open??false,false)}
  };

@@ -34,7 +34,7 @@ export function setupSceneChrome({document:doc=globalThis.document,getContext=()
    const toolbar=doc.getElementById('editor-toolbar');toolbar?.classList.toggle('hidden',!context.selectedCount);
    for(const el of toolbar?.querySelectorAll('[data-tool], [data-editor], #context-actions-open, [data-context-action]')||[])el.hidden=!context.editable;
    const resize=toolbar?.querySelector('[data-tool="resize"]');if(resize)resize.hidden=!context.canResize;
-   for(const [action,available] of Object.entries({align:context.selectedCount>1,group:context.selectedCount>1,ungroup:context.canUngroup,link:context.canLink})){
+   for(const [action,available] of Object.entries({align:context.selectedCount>1,group:context.selectedCount>1,ungroup:context.canUngroup,link:context.canLink,between:context.canBetween,spacing:context.canSpace})){
     const button=toolbar?.querySelector(`[data-context-action="${action}"]`);if(button)button.hidden=!context.editable||!available;
    }
    const count=doc.getElementById('selection-count');if(count)count.textContent=`${context.selectedCount||0} sélection`+(context.selectedCount>1?'s':'');
